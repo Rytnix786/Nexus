@@ -75,16 +75,34 @@ class Orchestrator:
                 "quota_subject": actor_subject,
             },
         }
-        
-        import redis
-        from rq import Queue
-        from app.core.worker_task import run_orchestrator_job
-        
-        redis_conn = redis.from_url(settings.redis_url)
-        q = Queue("nexus_runs", connection=redis_conn)
-        q.enqueue(run_orchestrator_job, state)
-        
-        yield from self._tail_redis_events(state["run_id"], redis_conn)
+
+        yield from self._stream_via_worker_or_inline(session, state)
+
+    def _stream_via_worker_or_inline(
+        self,
+        session: Session,
+        state: dict[str, Any],
+    ) -> Generator[dict[str, Any], None, None]:
+        """
+        Prefer worker-based execution via Redis/RQ, but fail open to inline
+        orchestration when queueing/streaming infrastructure is unavailable.
+        """
+        try:
+            import redis
+            from rq import Queue
+            from app.core.worker_task import run_orchestrator_job
+
+            redis_conn = redis.from_url(settings.redis_url)
+            q = Queue("nexus_runs", connection=redis_conn)
+            q.enqueue(run_orchestrator_job, state)
+            yield from self._tail_redis_events(str(state["run_id"]), redis_conn)
+            return
+        except Exception as exc:
+            logger.warning(
+                "Worker stream unavailable; falling back to inline execution",
+                extra={"run_id": str(state.get("run_id", "")), "error": str(exc)},
+            )
+            yield from self._execute_stream(session, state)
 
     def _tail_redis_events(self, run_id: str, redis_conn) -> Generator[dict[str, Any], None, None]:
         pubsub = redis_conn.pubsub()
@@ -143,16 +161,8 @@ class Orchestrator:
                 "reviewer": request.reviewer,
             },
         }
-        
-        import redis
-        from rq import Queue
-        from app.core.worker_task import run_orchestrator_job
-        
-        redis_conn = redis.from_url(settings.redis_url)
-        q = Queue("nexus_runs", connection=redis_conn)
-        q.enqueue(run_orchestrator_job, state)
-        
-        yield from self._tail_redis_events(state["run_id"], redis_conn)
+
+        yield from self._stream_via_worker_or_inline(session, state)
 
     def resume_budget_stream(
         self,
@@ -194,16 +204,8 @@ class Orchestrator:
                 "status": state["status"],
             },
         }
-        
-        import redis
-        from rq import Queue
-        from app.core.worker_task import run_orchestrator_job
-        
-        redis_conn = redis.from_url(settings.redis_url)
-        q = Queue("nexus_runs", connection=redis_conn)
-        q.enqueue(run_orchestrator_job, state)
-        
-        yield from self._tail_redis_events(state["run_id"], redis_conn)
+
+        yield from self._stream_via_worker_or_inline(session, state)
 
     def _execute_stream(self, session: Session, state: dict[str, Any]) -> Generator[dict[str, Any], None, None]:
         emitted_seq = len(state.get("trace", []))
