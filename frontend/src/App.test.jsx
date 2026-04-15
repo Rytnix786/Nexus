@@ -11,7 +11,8 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: /Launch Run/i })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Run History/i })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /History/i }));
+    // Multiple History buttons exist (navbar + sidebar), click sidebar version
+    fireEvent.click(screen.getAllByRole('button', { name: /History/i })[1]);
     expect(screen.getByText(/Run Explorer/i)).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole('button', { name: /Models/i })[1]);
@@ -21,3 +22,4 @@ describe('App shell', () => {
     expect(screen.getByText(/Knowledge Library/i)).toBeTruthy();
   });
 });
+
