@@ -62,6 +62,7 @@ export function NexusAppProvider({ children }) {
   const [authTokenDraft, setAuthTokenDraftState] = useState(() => readStorage(STORAGE_KEYS.authTokenDraft) || readStorage(STORAGE_KEYS.authToken));
   const [authState, setAuthState] = useState(DEFAULT_AUTH_STATE);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [selectedResultRunId, setSelectedResultRunId] = useState('');
   const restoreAttemptRef = useRef('');
 
   const runs = useRuns();
@@ -217,6 +218,8 @@ export function NexusAppProvider({ children }) {
     selectRun,
     startRun,
     bootstrapped,
+    selectedResultRunId,
+    setSelectedResultRunId,
   }), [
     applyAuthToken,
     authState,
@@ -243,6 +246,7 @@ export function NexusAppProvider({ children }) {
     runs.systemMetrics,
     runStream,
     selectRun,
+    selectedResultRunId,
     setCurrentTab,
     startRun,
   ]);
@@ -269,6 +273,14 @@ export function NexusAppProvider({ children }) {
     restoreAttemptRef.current = preferredRunId;
     void selectRun(preferredRunId);
   }, [authState.status, runStream.runId, runs.recentRuns, selectRun]);
+
+  // Auto-navigate to the Results tab when a run finishes
+  useEffect(() => {
+    if (runStream.status === 'completed' && runStream.runId) {
+      setSelectedResultRunId(runStream.runId);
+      setCurrentTab('results');
+    }
+  }, [runStream.status, runStream.runId, setCurrentTab]);
 
   useEffect(() => {
     if (runStream.runId) {

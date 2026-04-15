@@ -7,7 +7,9 @@ export default function Navbar({ currentTab = 'dashboard', onTabChange, onStartR
       <div className="flex items-center gap-12">
         <span className="text-2xl font-bold text-primary drop-shadow-[0_0_10px_rgba(0,229,255,0.4)] font-headline tracking-tight">Nexus AI</span>
         <div className="hidden md:flex gap-8 items-center">
-          <button onClick={() => onTabChange('dashboard')} className={`font-headline transition-all duration-300 ${['dashboard', 'active', 'history'].includes(currentTab) ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>Orchestrator</button>
+          <button onClick={() => onTabChange('dashboard')} className={`font-headline transition-all duration-300 ${['dashboard', 'active'].includes(currentTab) ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>Orchestrator</button>
+          <button onClick={() => onTabChange('results')} className={`font-headline transition-all duration-300 ${currentTab === 'results' ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>Results</button>
+          <button onClick={() => onTabChange('history')} className={`font-headline transition-all duration-300 ${currentTab === 'history' ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>History</button>
           <button onClick={() => onTabChange('agents')} className={`font-headline transition-all duration-300 ${currentTab === 'agents' ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>Agents</button>
           <button onClick={() => onTabChange('models')} className={`font-headline transition-all duration-300 ${currentTab === 'models' ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>Models</button>
           <button onClick={() => onTabChange('library')} className={`font-headline transition-all duration-300 ${currentTab === 'library' ? 'text-primary border-b-2 border-primary pb-1' : 'text-[#f3f3fb]/40 hover:text-primary'}`}>Library</button>

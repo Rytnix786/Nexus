@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Zap, History, Cpu, Settings, FileText, Activity, BookOpen, Boxes } from 'lucide-react';
+import { LayoutGrid, Zap, History, Cpu, Settings, FileText, Activity, BookOpen, Boxes, ScrollText } from 'lucide-react';
 import clsx from 'clsx';
 import { prettyStatus, relativeTimeLabel } from './shared';
 
@@ -16,6 +16,7 @@ export default function Sidebar({
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
     { id: 'active', label: 'Active Runs', icon: Zap },
+    { id: 'results', label: 'Results', icon: ScrollText },
     { id: 'history', label: 'History', icon: History },
     { id: 'agents', label: 'Agent Pool', icon: Cpu },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -85,9 +86,14 @@ export default function Sidebar({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-[11px] font-medium text-white">{String(run.run_id || '').slice(0, 12)}</p>
+                      {run.objective && (
+                        <p className="truncate text-[10px] text-on-surface-variant/80 mt-0.5">
+                          {String(run.objective).length > 40 ? String(run.objective).slice(0, 37) + '…' : String(run.objective)}
+                        </p>
+                      )}
                       <p className="text-[10px] text-on-surface-variant">{prettyStatus(run.status)}</p>
                     </div>
-                    <span className={clsx('rounded-full px-2 py-0.5 text-[10px] uppercase tracking-widest', isActive ? 'bg-primary/15 text-primary' : 'bg-white/5 text-white/60')}>
+                    <span className={clsx('rounded-full px-2 py-0.5 text-[10px] uppercase tracking-widest flex-shrink-0', isActive ? 'bg-primary/15 text-primary' : 'bg-white/5 text-white/60')}>
                       {run.status || 'unknown'}
                     </span>
                   </div>

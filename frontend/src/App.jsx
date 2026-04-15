@@ -8,6 +8,7 @@ import AgentPool from './components/AgentPool';
 import SettingsPanel from './components/SettingsPanel';
 import ModelsPanel from './components/ModelsPanel';
 import LibraryPanel from './components/LibraryPanel';
+import ResultsPanel from './components/ResultsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { NexusAppProvider, useNexusApp } from './state/NexusAppContext';
 
@@ -37,6 +38,8 @@ function AppShell() {
     runsError,
     runStream,
     selectRun,
+    selectedResultRunId,
+    setSelectedResultRunId,
   } = useNexusApp();
 
   const shellRunStream = {
@@ -89,7 +92,9 @@ function AppShell() {
 
         {currentTab === 'active' && (
           <ErrorBoundary>
-            <TraceTimeline runStream={shellRunStream} />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <TraceTimeline runStream={shellRunStream} />
+            </div>
           </ErrorBoundary>
         )}
 
@@ -119,6 +124,17 @@ function AppShell() {
           </div>
         )}
 
+        {currentTab === 'results' && (
+          <ErrorBoundary>
+            <ResultsPanel
+              recentRuns={recentRuns}
+              runStream={runStream}
+              selectedResultRunId={selectedResultRunId}
+              setSelectedResultRunId={setSelectedResultRunId}
+              onSelectRun={selectRun}
+            />
+          </ErrorBoundary>
+        )}
         {currentTab === 'agents' && (
           <ErrorBoundary>
             <AgentPool />

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Loader2, Pause, Square, FileText, Database, BookOpen, Globe, Terminal } from 'lucide-react';
 import clsx from 'clsx';
@@ -14,14 +14,34 @@ function getIconForEventType(type) {
 }
 
 export default function TraceTimeline({ runStream = {} }) {
-  const scrollRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const bottomAnchorRef = useRef(null);
   const sortedEvents = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
 
-  // Auto-scroll when new events arrive
+  // ── Smart auto-scroll ──────────────────────────────────────────────────────
+  // Tracks whether the user has manually scrolled up. If yes, suppress
+  // auto-scroll until they return to the bottom (within BOTTOM_THRESHOLD px).
+  const userScrolledUpRef = useRef(false);
+  const BOTTOM_THRESHOLD = 80; // px from bottom considered "at bottom"
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    userScrolledUpRef.current = distanceFromBottom > BOTTOM_THRESHOLD;
+  }, []);
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  // Auto-scroll to bottom only when not manually scrolled up
+  useEffect(() => {
+    if (userScrolledUpRef.current) return;
+    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [sortedEvents]);
 
   // If status is completed, show the final report view entirely OR we could show both. Let's just show the report view.
@@ -54,13 +74,13 @@ export default function TraceTimeline({ runStream = {} }) {
   }
 
   return (
-    <div className="flex gap-10 h-full overflow-hidden pb-10 px-8">
+    <div className="flex gap-10 h-full min-h-0 overflow-hidden pb-10 px-8">
       {/* Visual Accents */}
       <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] rounded-full bg-primary/10 blur-[120px] pointer-events-none -z-10"></div>
       <div className="fixed bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] rounded-full bg-secondary/10 blur-[100px] pointer-events-none -z-10"></div>
 
       {/* Main Timeline Column */}
-      <section className="flex-1 flex flex-col gap-6" style={{maxWidth: 'calc(100vw - 32rem)'}}>
+      <section className="flex-1 min-h-0 flex flex-col gap-6" style={{maxWidth: 'calc(100vw - 32rem)'}}>
         <div className="flex items-center justify-between animate-slide-in">
           <div>
             <h1 className="text-3xl font-bold font-headline tracking-tight text-on-surface">
@@ -81,7 +101,7 @@ export default function TraceTimeline({ runStream = {} }) {
         </div>
 
         {/* Scrollable Container */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto pr-4 custom-scrollbar pb-32">
+        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto pr-4 custom-scrollbar pb-32">
            {clusteredNodes.length === 0 && !runStream.loading && (
              <p className="mt-10 text-on-surface-variant italic">Waiting for events...</p>
           )}
@@ -172,7 +192,7 @@ export default function TraceTimeline({ runStream = {} }) {
                 );
               })}
             </AnimatePresence>
-            <div ref={scrollRef}></div>
+            <div ref={bottomAnchorRef}></div>
           </div>
         </div>
       </section>
