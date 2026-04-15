@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #ebf4ff;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(254, 132, 64, 0.24), transparent 40%),
+    radial-gradient(circle at 89% 8%, rgba(63, 221, 255, 0.24), transparent 34%),
+    radial-gradient(circle at 52% 100%, rgba(255, 97, 140, 0.18), transparent 40%),
+    linear-gradient(160deg, #0b0f1b 0%, #111b2c 45%, #151126 100%);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: 'Sora', 'Manrope', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(83, 240, 255, 0.55), rgba(255, 152, 82, 0.55));
+  border-radius: 999px;
+}
+
+.timeline-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 220ms ease, border-color 220ms ease, background-color 220ms ease;
+}
+
+.timeline-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(85, 239, 255, 0.9), rgba(255, 159, 89, 0.8));
+  opacity: 0.85;
+}
+
+.timeline-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+button,
+input,
+textarea {
+  transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease, background-color 200ms ease;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(125, 245, 255, 0.85);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

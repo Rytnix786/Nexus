@@ -1,0 +1,15 @@
+# Evaluation cache - can be regenerated
+.cache/
+
+# Evaluation results - track separately
+results.json
+
+# Node modules
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

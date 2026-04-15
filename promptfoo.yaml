@@ -1,0 +1,23 @@
+description: Nexus agent evaluation (accuracy, groundedness, refusal correctness)
+
+prompts:
+  - |
+    Objective: {{objective}}
+    Context:
+    {{context}}
+
+providers:
+  - id: file://./evals/nexus-provider.cjs
+    label: nexus-api
+
+tests: file://./evals/promptfoo-tests.yaml
+
+defaultTest:
+  options:
+    transformVars: "{ ...vars, context: vars.context || '' }"
+
+evaluateOptions:
+  maxConcurrency: 2
+  showProgressBar: true
+
+writeLatestResults: true

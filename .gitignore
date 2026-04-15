@@ -1,0 +1,35 @@
+# Environment and secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local databases and temp files
+*.db
+*.sqlite
+*.sqlite3
+tmp_*.py
+
+# Node
+node_modules/
+
+# Frontend outputs
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+
+# Eval artifacts
+evals/.cache/
+evals/results.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

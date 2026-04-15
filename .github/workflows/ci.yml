@@ -1,0 +1,254 @@
+name: Nexus CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run backend test suite
+        run: python -m pytest tests -q
+
+  migration-check:
+    name: Migration Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nexus
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://nexus:nexus@localhost:5432/nexus
+      APP_ENV: production
+      STRICT_MIGRATIONS: true
+      AUTH_RBAC_V2: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations to head
+        run: alembic upgrade head
+
+      - name: Validate migration version table exists
+        run: |
+          python - <<'PY'
+          import os
+          from sqlalchemy import create_engine, text
+
+          db_url = os.environ['DATABASE_URL']
+          engine = create_engine(db_url)
+
+          with engine.connect() as conn:
+              version = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one_or_none()
+
+          if not version:
+              raise SystemExit('alembic_version is empty after upgrade head')
+          print(f'Migration check passed at revision: {version}')
+          PY
+
+  frontend-tests:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend unit tests
+        run: npm run test
+
+  e2e-smoke:
+    name: Frontend E2E Smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e smoke tests
+        run: npm run test:e2e
+
+  build:
+    name: Build Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Compile backend source tree
+        working-directory: backend
+        run: python -m compileall app
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend production bundle
+        working-directory: frontend
+        run: npm run build
+
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies and pip-audit
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          pip install pip-audit
+
+      - name: Run backend dependency audit
+        working-directory: backend
+        run: pip-audit --strict -r requirements.txt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend dependency audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  required-gates:
+    name: Required Gates Check
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - backend-tests
+      - migration-check
+      - frontend-tests
+      - e2e-smoke
+      - build
+      - dependency-audit
+    steps:
+      - name: Fail if any required gate is missing or unsuccessful
+        run: |
+          echo "backend-tests=${{ needs.backend-tests.result }}"
+          echo "migration-check=${{ needs.migration-check.result }}"
+          echo "frontend-tests=${{ needs.frontend-tests.result }}"
+          echo "e2e-smoke=${{ needs.e2e-smoke.result }}"
+          echo "build=${{ needs.build.result }}"
+          echo "dependency-audit=${{ needs.dependency-audit.result }}"
+
+          [ "${{ needs.backend-tests.result }}" = "success" ] || exit 1
+          [ "${{ needs.migration-check.result }}" = "success" ] || exit 1
+          [ "${{ needs.frontend-tests.result }}" = "success" ] || exit 1
+          [ "${{ needs.e2e-smoke.result }}" = "success" ] || exit 1
+          [ "${{ needs.build.result }}" = "success" ] || exit 1
+          [ "${{ needs.dependency-audit.result }}" = "success" ] || exit 1
