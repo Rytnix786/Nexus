@@ -8,6 +8,8 @@ import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import { getRunStatus, getRunTimeline } from '../lib/api';
 import { prettyStatus, relativeTimeLabel, parseTimestamp, statusClass } from './shared';
+import { useNexusApp } from '../state/NexusAppContext';
+import RunMetrics from './RunMetrics';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +142,7 @@ export default function ResultsPanel({
   setSelectedResultRunId,
   onSelectRun,
 }) {
+  const { setCurrentTab } = useNexusApp();
   // ── State ──────────────────────────────────────────────────────────────────
   const [loadedDetails, setLoadedDetails] = useState(null);   // runDetails fetched for the selected run
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -320,6 +323,12 @@ export default function ResultsPanel({
         <p className="text-sm max-w-sm text-center">
           Start a run from the Orchestrator. When it completes, your report will appear here.
         </p>
+        <button
+          onClick={() => setCurrentTab('dashboard')}
+          className="mt-4 bg-primary text-[#005762] font-bold px-6 py-2 rounded-full transition-all hover:shadow-[0_0_20px_rgba(0,229,255,0.4)] hover:-translate-y-0.5"
+        >
+          Start a Run →
+        </button>
       </div>
     );
   }
@@ -524,6 +533,19 @@ export default function ResultsPanel({
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
               </div>
             </div>
+          )}
+
+          {/* Post-run metrics scorecard */}
+          {!loadingDetails && !detailsError && details && ['completed', 'rejected', 'failed', 'timeout', 'budget_exhausted'].includes(details.status) && (
+            <RunMetrics
+              status={details.status}
+              events={details.events || []}
+              tokenBudget={details.initial_token_budget}
+              remainingTokens={details.token_budget_remaining}
+              reconnectCount={runStream?.reconnectCount || 0}
+              decisionAudit={runStream?.decisionAudit || []}
+              runDetails={details}
+            />
           )}
         </div>
       </main>

@@ -18,6 +18,7 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
   const [objective, setObjective] = useState('');
   const [tokenBudget, setTokenBudget] = useState(isDeveloperMode ? 60000 : 9000);
   const [highImpact, setHighImpact] = useState(true);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadedContext, setUploadedContext] = useState('');
   const [uploadSummary, setUploadSummary] = useState('');
@@ -73,6 +74,12 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
     "Analyze market trends",
     "Deep research on LLM architectures",
     "Technical audit of codebase"
+  ];
+
+  const templates = [
+    { title: 'Market Analysis', description: 'Analyze competitive landscape and trends' },
+    { title: 'Technical Audit', description: 'Deep code and architecture review' },
+    { title: 'Research Report', description: 'Comprehensive research synthesis' },
   ];
 
   return (
@@ -174,9 +181,30 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
                 {suggestion}
               </button>
             ))}
-            <button className="px-6 py-2 rounded-full border border-outline-variant/30 text-sm font-medium text-on-surface-variant chip-hover premium-hover bg-surface-container-low/50 backdrop-blur-md flex items-center gap-2">
+            <button 
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="px-6 py-2 rounded-full border border-outline-variant/30 text-sm font-medium text-on-surface-variant chip-hover premium-hover bg-surface-container-low/50 backdrop-blur-md flex items-center gap-2 relative"
+            >
               <Plus className="w-4 h-4" />
               More templates
+              {showTemplates && (
+                <div className="absolute top-full mt-2 left-0 bg-surface-container rounded-2xl border border-outline-variant/30 shadow-lg p-3 space-y-2 min-w-max z-50">
+                  {templates.map(t => (
+                    <button
+                      key={t.title}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setObjective(t.title);
+                        setShowTemplates(false);
+                      }}
+                      className="w-full px-4 py-2 rounded-lg text-left text-sm text-on-surface hover:bg-surface-container-highest transition-colors block"
+                    >
+                      <div className="font-medium">{t.title}</div>
+                      <div className="text-xs text-on-surface-variant">{t.description}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </button>
           </div>
 

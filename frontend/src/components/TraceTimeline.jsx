@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Loader2, Pause, Square, FileText, Database, BookOpen, Globe, Terminal } from 'lucide-react';
+import { Check, Loader2, FileText, Database, BookOpen, Globe, Terminal, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
+import { useNexusApp } from '../state/NexusAppContext';
 import ApprovalStation from './ApprovalStation';
 import RunArtifact from './RunArtifact';
 import AgentGraph from './AgentGraph';
@@ -14,6 +15,7 @@ function getIconForEventType(type) {
 }
 
 export default function TraceTimeline({ runStream = {} }) {
+  const { setCurrentTab } = useNexusApp();
   const scrollContainerRef = useRef(null);
   const bottomAnchorRef = useRef(null);
   const sortedEvents = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
@@ -44,9 +46,25 @@ export default function TraceTimeline({ runStream = {} }) {
     bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [sortedEvents]);
 
-  // If status is completed, show the final report view entirely OR we could show both. Let's just show the report view.
+  // If status is completed, show completion message with CTA to Results tab
   if (runStream.status === 'completed' && (runStream.output || runStream.runDetails?.output || runStream.runDetails?.final_output)) {
-    return <RunArtifact runStream={runStream} />;
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full p-8 relative z-10">
+        <div className="text-center max-w-lg">
+          <div className="mb-6">
+            <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto" />
+          </div>
+          <h2 className="text-3xl font-headline font-bold text-on-surface mb-3">Run Completed Successfully</h2>
+          <p className="text-on-surface-variant mb-8">View the full report and all artifacts in the dedicated Results tab.</p>
+          <button 
+            onClick={() => setCurrentTab('results')}
+            className="bg-primary text-[#005762] font-bold px-8 py-3 rounded-full transition-all hover:shadow-[0_0_20px_rgba(0,229,255,0.4)] hover:-translate-y-0.5"
+          >
+            Go to Results →
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // If status is awaiting approval, show ApprovalStation

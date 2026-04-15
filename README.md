@@ -13,12 +13,28 @@ It is designed around production-oriented patterns that many demos skip:
 
 ## Core Features
 
-- Multi-agent flow: planner -> researcher -> analyst -> writer -> human_approval -> critic -> finalize.
+- Multi-agent flow: planner -> researcher -> analyst -> writer -> human_approval -> critic -> refusal -> finalize.
 - Upload and parse source files (PDF, DOCX, TXT).
 - Role-based access support (`admin`, `operator`, `reviewer`) with API key and JWT modes.
 - Redis-backed fail-open rate limiting.
 - Resume on human decision and budget top-up.
 - Full API surface for run creation, tracking, timeline inspection, stopping, and continuation.
+
+## Recent Improvements (2026-04)
+
+**Dashboard Panels**: All dashboard screens now use live API data instead of mock values:
+- Agent Pool: Real-time agent states (active/completed/idle) derived from run events
+- Models Panel: Accurate stack disclosure (Ollama only, no cloud provider mocking)
+- Settings Panel: Live health badges from `/api/health/ratelimit` endpoint
+- Library Panel: Full file upload integration with session-based persistence
+
+**Orchestration Graph**: Complete 8-node graph with refusal gate properly wired between analyst and finalize nodes.
+
+**Run Timeline**: Improved UX for completed runs (clear navigation to Results tab instead of duplicate report).
+
+**Approval Workflow**: Empty approval notes now fail gracefully with fallback message; rejection requires reason.
+
+**Results Dashboard**: Post-run metrics scorecard (steps, tokens, revisions) now visible for terminal runs.
 
 ## Architecture
 
@@ -34,8 +50,9 @@ flowchart LR
   A --> W[writer]
   W --> H{human approval}
   H -->|approve| C[critic]
-  H -->|reject| Z[finalize]
-  C --> Z[finalize]
+  H -->|reject| REF[refusal]
+  C --> REF
+  REF --> Z[finalize]
 
   O --> SSE[SSE Stream]
   Z --> DB[(PostgreSQL)]
@@ -115,6 +132,14 @@ Important variables are provided in `.env.example`:
 | POST | `/api/runs/{run_id}/resume/stream` | Yes | Resume approval-paused run via SSE |
 | POST | `/api/runs/{run_id}/resume-budget/stream` | Yes | Resume budget-exhausted run with extra budget |
 | POST | `/api/runs/{run_id}/stop` | Yes | Stop an active or paused run |
+
+## Key Behaviors
+
+**Library Panel**: Uploaded files are persisted in the session (in-memory) only. Files are not persisted to disk or database across page refreshes. Reload the page to clear the library.
+
+**Language Model**: Ollama is the only supported LLM backend. To change the model, modify `OLLAMA_MODEL` in `.env` and restart containers. Cloud providers (OpenAI, Anthropic) are not integrated; extend the backend to add support.
+
+**Health Status**: The Settings panel queries `/api/health/ratelimit` to show live PostgreSQL and Redis connection status. These are real-time checks, not cached values.
 
 ## Local Verification
 

@@ -123,6 +123,9 @@ export function useRunStream({ resolveRunId, onFetchRecentRuns, isDeveloperMode 
       if (evt.data.initial_token_budget != null) setInitialTokenBudget(Number(evt.data.initial_token_budget));
       if (evt.data.token_budget_remaining != null) setRemainingTokens(Number(evt.data.token_budget_remaining));
       setOutput(evt.data.output || '');
+      if (evt.data.run_id) {
+        void loadRunDetails(evt.data.run_id);
+      }
     }
   }
 

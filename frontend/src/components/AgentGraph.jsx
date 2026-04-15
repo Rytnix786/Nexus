@@ -8,6 +8,7 @@ const initialNodes = [
   { id: 'planner', position: { x: 100, y: 50 }, data: { label: 'Planner' } },
   { id: 'researcher', position: { x: 100, y: 150 }, data: { label: 'Researcher' } },
   { id: 'analyst', position: { x: 100, y: 250 }, data: { label: 'Analyst' } },
+  { id: 'refusal', position: { x: 100, y: 300 }, data: { label: 'Refusal Gate' } },
   { id: 'writer', position: { x: 100, y: 350 }, data: { label: 'Writer' } },
   { id: 'human_approval', position: { x: -50, y: 450 }, data: { label: 'Human Approval' } },
   { id: 'critic', position: { x: 250, y: 450 }, data: { label: 'Critic' } },
@@ -17,7 +18,9 @@ const initialNodes = [
 const initialEdges = [
   { id: 'e-p-r', source: 'planner', target: 'researcher' },
   { id: 'e-r-a', source: 'researcher', target: 'analyst' },
+  { id: 'e-a-ref', source: 'analyst', target: 'refusal' },
   { id: 'e-a-w', source: 'analyst', target: 'writer' },
+  { id: 'e-ref-f', source: 'refusal', target: 'finalize' },
   { id: 'e-w-ha', source: 'writer', target: 'human_approval' },
   { id: 'e-w-c', source: 'writer', target: 'critic' },
   { id: 'e-ha-f', source: 'human_approval', target: 'finalize' },

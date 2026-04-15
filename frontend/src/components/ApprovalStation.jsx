@@ -34,8 +34,17 @@ export default function ApprovalStation({ runStream = {} }) {
     }
   }, [draftText, runStream]);
 
-  const handleApprove = () => runStream.submitDecision('approve', notes || 'Approved by operator.');
-  const handleReject = () => runStream.submitDecision('reject', notes || 'Rejected by operator.');
+  const handleApprove = () => {
+    const reviewerNotes = notes.trim() || 'Approved by operator.';
+    runStream.submitDecision('approve', reviewerNotes);
+  };
+  const handleReject = () => {
+    if (!notes.trim()) {
+      alert('Please provide a reason for rejection.');
+      return;
+    }
+    runStream.submitDecision('reject', notes);
+  };
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center h-full p-8 relative z-10">
@@ -66,13 +75,15 @@ export default function ApprovalStation({ runStream = {} }) {
         </div>
 
         <div className="mb-8">
-           <label className="text-xs uppercase tracking-widest text-[#f59e0b] mb-2 block font-label">Reviewer Notes</label>
+           <label className="text-xs uppercase tracking-widest text-[#f59e0b] mb-2 block font-label">Reviewer Notes <span className="text-on-surface-variant">(Optional)</span></label>
            <textarea 
              value={notes}
              onChange={e => setNotes(e.target.value)}
+             maxLength={500}
              className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-4 text-on-surface focus:ring-2 focus:ring-[#f59e0b]/50 focus:outline-none min-h-[100px] resize-none"
              placeholder="Looks good to me..."
            />
+           <div className="text-xs text-on-surface-variant mt-2 text-right">{notes.length}/500</div>
         </div>
 
         <div className="grid grid-cols-2 gap-6">

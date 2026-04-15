@@ -57,8 +57,8 @@ export default function Navbar({ currentTab = 'dashboard', onTabChange, onStartR
         >
           Start Run
         </button>
-        <div className="w-10 h-10 rounded-full border border-outline-variant overflow-hidden">
-          <img alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2RFqvqQjCnA_qlOLT8i0GBPfRjSOYikAEQZtA5gHWfKYJuFxy6MKGAJlT0YHfoy5EXLWdzfbJpDn-z6mkRIvdIUcED54NY-NT-DwQckHt9hLDDxrCqTkE9n-Zg3reV1m36P_Y_ROjh-VazwmbKhaeAXvpL9o--Qly5V8E3CTfj4TJt_X8ujpJ7jGwdjOABWLNYSoDe8FO88UJoS8zUbA6jVT3h-tvWHuKcnoiAXbP57Gc5M_RB3IrTxjksFZUcQF-6P5xKQNF4KM" className="w-full h-full object-cover" />
+        <div className="w-10 h-10 rounded-full border border-outline-variant bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+          {authState?.claims?.sub ? String(authState.claims.sub).slice(0, 2).toUpperCase() : 'NX'}
         </div>
       </div>
     </nav>
