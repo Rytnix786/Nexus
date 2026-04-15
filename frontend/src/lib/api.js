@@ -104,11 +104,12 @@ async function buildHttpError(prefix, res) {
   return new Error(`${prefix}: ${res.status}${detail ? ` (${detail})` : ''}`);
 }
 
-export async function streamRun(payload, onEvent) {
+export async function streamRun(payload, onEvent, options = {}) {
   const idempotencyKey = `${runtimeIdempotencyPrefix || 'run'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const res = await fetch(`${API_BASE}/runs/stream`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }),
+    signal: options.signal,
     body: JSON.stringify(payload),
   });
   if (!res.ok || !res.body) throw await buildHttpError('Run start failed', res);
@@ -124,6 +125,7 @@ export async function resumeRun(runId, payload, onEvent, options = {}) {
       'Idempotency-Key': idempotencyKey,
       ...(options.lastEventId ? { 'Last-Event-ID': String(options.lastEventId) } : {}),
     }),
+    signal: options.signal,
     body: JSON.stringify(payload),
   });
   if (!res.ok || !res.body) throw await buildHttpError('Run resume failed', res);
@@ -139,6 +141,7 @@ export async function resumeRunWithBudget(runId, payload, onEvent, options = {})
       'Idempotency-Key': idempotencyKey,
       ...(options.lastEventId ? { 'Last-Event-ID': String(options.lastEventId) } : {}),
     }),
+    signal: options.signal,
     body: JSON.stringify(payload),
   });
   if (!res.ok || !res.body) throw await buildHttpError('Budget resume failed', res);

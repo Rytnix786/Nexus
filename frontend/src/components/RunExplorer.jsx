@@ -1,3 +1,5 @@
+import { prettyStatus, relativeTimeLabel } from './shared';
+
 export default function RunExplorer({
   searchText,
   setSearchText,
@@ -14,12 +16,11 @@ export default function RunExplorer({
   setRunExplorerPage,
   runExplorerTotal,
   perPage,
-  relativeTimeLabel,
-  prettyStatus,
   onStopRun,
   stoppingRunId,
 }) {
   const stoppableStatuses = ['created', 'running', 'awaiting_human'];
+  const runs = Array.isArray(recentRuns) ? recentRuns : [];
 
   return (
     <aside className="rounded-[28px] border border-white/15 bg-black/30 p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl">
@@ -44,7 +45,12 @@ export default function RunExplorer({
         </div>
       </div>
       <div className="mt-4 max-h-[560px] space-y-2 overflow-auto">
-        {recentRuns.map((run) => {
+        {runs.length === 0 && (
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm text-white/60">
+            {String(searchText || statusFilter || dateFrom || dateTo).trim() ? 'No runs match the current filters.' : 'No runs available yet.'}
+          </div>
+        )}
+        {runs.map((run) => {
           const canStop = stoppableStatuses.includes(String(run.status || '').toLowerCase());
           const isStopping = stoppingRunId === run.run_id;
 
@@ -69,9 +75,9 @@ export default function RunExplorer({
         })}
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-white/70">
-        <button onClick={() => setRunExplorerPage((p) => Math.max(1, p - 1))} className="rounded border border-white/20 px-2 py-1">Prev</button>
+        <button onClick={() => setRunExplorerPage((p) => Math.max(1, p - 1))} className="rounded border border-white/20 px-2 py-1" disabled={runExplorerPage <= 1}>Prev</button>
         <span>Page {runExplorerPage} / {Math.max(1, Math.ceil(runExplorerTotal / perPage))}</span>
-        <button onClick={() => setRunExplorerPage((p) => p + 1)} className="rounded border border-white/20 px-2 py-1">Next</button>
+        <button onClick={() => setRunExplorerPage((p) => p + 1)} className="rounded border border-white/20 px-2 py-1" disabled={runExplorerPage >= Math.max(1, Math.ceil(runExplorerTotal / perPage))}>Next</button>
       </div>
     </aside>
   );

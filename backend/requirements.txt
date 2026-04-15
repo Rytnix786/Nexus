@@ -4,6 +4,7 @@ pydantic==2.12.0
 pydantic-settings==2.11.0
 sqlalchemy==2.0.44
 langgraph>=1.0.10
+langsmith>=0.1.147
 httpx==0.27.0
 pytest>=9.0.3
 psycopg[binary]==3.2.13

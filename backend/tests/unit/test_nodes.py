@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -103,6 +104,27 @@ def test_planner_creates_plan_and_routes_to_researcher(monkeypatch: pytest.Monke
     assert result["trace"][-1]["node"] == "planner"
     assert fake_client.requests[0]["url"] == "http://ollama.local/api/generate"
     assert fake_client.requests[0]["json"]["model"] == "nexus-model"
+
+
+def test_planner_opens_ollama_trace_span(monkeypatch: pytest.MonkeyPatch):
+    _install_fake_client(monkeypatch, "Plan text")
+    observed: dict[str, Any] = {}
+
+    @contextmanager
+    def _fake_safe_trace_span(name: str, metadata: dict[str, Any] | None = None):
+        observed["name"] = name
+        observed["metadata"] = metadata or {}
+        yield
+
+    monkeypatch.setattr(nodes, "safe_trace_span", _fake_safe_trace_span)
+
+    result = nodes.planner_node(_base_state())
+
+    assert result["status"] == "running"
+    assert observed["name"] == "node.ollama_generate"
+    assert observed["metadata"]["run_id"] == "run-1"
+    assert observed["metadata"]["node"] == "planner"
+    assert observed["metadata"]["prompt_length"] > 0
 
 
 def test_researcher_keeps_researching_before_advancing(monkeypatch: pytest.MonkeyPatch):

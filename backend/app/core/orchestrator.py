@@ -13,6 +13,7 @@ from app.core.logging import current_request_id, get_logger
 from app.core.models import ApprovalDecisionRequest, BudgetResumeRequest, RunCreateRequest
 from app.core.settings import settings
 from app.core.state import AgentState
+from app.core.tracing import safe_trace_span
 from app.db import repository
 
 
@@ -211,209 +212,216 @@ class Orchestrator:
         emitted_seq = len(state.get("trace", []))
         last_state = state
 
-        try:
-            snapshots = self.graph.stream(
-                state,
-                stream_mode="values",
-                config={"recursion_limit": max(20, settings.max_iterations * 6)},
-            )
+        with safe_trace_span(
+            "orchestrator.execute_stream",
+            {
+                "run_id": str(state.get("run_id", "")),
+                "trace_size": emitted_seq,
+            },
+        ):
+            try:
+                snapshots = self.graph.stream(
+                    state,
+                    stream_mode="values",
+                    config={"recursion_limit": max(20, settings.max_iterations * 6)},
+                )
 
-            for snapshot in snapshots:
-                if not isinstance(snapshot, dict):
-                    continue
-                last_state = snapshot
-                last_state["updated_at"] = datetime.now(timezone.utc)
-
-                persisted_state = repository.get_run_state(session, str(last_state.get("run_id", "")))
-                if persisted_state and persisted_state.get("stop_requested"):
-                    stop_reason = str(persisted_state.get("stop_reason", "Stopped by operator"))
-                    stop_actor = str(persisted_state.get("stop_requested_by", "unknown"))
-                    trace = list(last_state.get("trace", []))
-                    stop_event = {
-                        "seq": len(trace) + 1,
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                        "event_type": "run_stopped",
-                        "node": "orchestrator",
-                        "message": "Run stopped by operator",
-                        "data": {
-                            "reason": stop_reason,
-                            "actor": stop_actor,
-                        },
-                    }
-                    last_state["status"] = "stopped"
-                    last_state["current_node"] = "finalize"
+                for snapshot in snapshots:
+                    if not isinstance(snapshot, dict):
+                        continue
+                    last_state = snapshot
                     last_state["updated_at"] = datetime.now(timezone.utc)
-                    last_state["trace"] = [*trace, stop_event]
-                    repository.persist_step(
-                        session,
-                        state=last_state,
-                        seq=int(stop_event["seq"]),
-                        event_type="run_stopped",
-                        node="orchestrator",
-                        message="Run stopped by operator",
-                        data={"reason": stop_reason, "actor": stop_actor},
-                    )
-                    yield {
-                        "event": "timeline",
-                        "data": {
-                            "run_id": last_state["run_id"],
-                            "seq": int(stop_event["seq"]),
-                            "status": last_state["status"],
-                            "current_node": last_state["current_node"],
-                            "initial_token_budget": last_state.get("initial_token_budget", 0),
-                            "token_budget_remaining": last_state.get("token_budget_remaining", 0),
-                            "metering_mode": last_state.get("metering_mode", "estimated"),
-                            "prompt_tokens_total": int(last_state.get("prompt_tokens_total", 0)),
-                            "completion_tokens_total": int(last_state.get("completion_tokens_total", 0)),
-                            "total_tokens_used": int(last_state.get("total_tokens_used", 0)),
-                            "quota_subject": str(last_state.get("quota_subject", "")),
-                            "quota_daily_limit": int(last_state.get("quota_daily_limit", settings.quota_daily_tokens)),
-                            "quota_daily_used": int(last_state.get("quota_daily_used", 0)),
-                            "message": stop_event["message"],
-                            "event_type": stop_event["event_type"],
-                            "node": stop_event["node"],
-                            "data": stop_event["data"],
-                        },
-                    }
-                    break
 
-                trace = last_state.get("trace", [])
-                if trace and trace[-1]["seq"] > emitted_seq:
-                    evt = trace[-1]
-                    emitted_seq = int(evt["seq"])
-                    repository.persist_step(
-                        session,
-                        state=last_state,
-                        seq=emitted_seq,
-                        event_type=str(evt["event_type"]),
-                        node=str(evt["node"]),
-                        message=str(evt["message"]),
-                        data=dict(evt.get("data", {})),
-                    )
-                    event_data = dict(evt.get("data", {}))
-                    if settings.token_ledger_v2 and int(event_data.get("total_tokens", event_data.get("tokens_used", 0)) or 0) > 0:
-                        prompt_tokens = int(event_data.get("prompt_tokens", 0) or 0)
-                        completion_tokens = int(event_data.get("completion_tokens", event_data.get("tokens_used", 0)) or 0)
-                        total_tokens = int(event_data.get("total_tokens", event_data.get("tokens_used", 0)) or 0)
-                        metering_mode = str(event_data.get("metering_mode", "estimated"))
-                        repository.append_token_usage(
-                            session=session,
-                            run_id=last_state["run_id"],
-                            seq=emitted_seq,
-                            node=str(evt["node"]),
-                            provider="ollama",
-                            model=settings.ollama_model,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            total_tokens=total_tokens,
-                            metering_mode=metering_mode,
-                        )
-                        quota_row = repository.consume_quota_tokens(
+                    persisted_state = repository.get_run_state(session, str(last_state.get("run_id", "")))
+                    if persisted_state and persisted_state.get("stop_requested"):
+                        stop_reason = str(persisted_state.get("stop_reason", "Stopped by operator"))
+                        stop_actor = str(persisted_state.get("stop_requested_by", "unknown"))
+                        trace = list(last_state.get("trace", []))
+                        stop_event = {
+                            "seq": len(trace) + 1,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                            "event_type": "run_stopped",
+                            "node": "orchestrator",
+                            "message": "Run stopped by operator",
+                            "data": {
+                                "reason": stop_reason,
+                                "actor": stop_actor,
+                            },
+                        }
+                        last_state["status"] = "stopped"
+                        last_state["current_node"] = "finalize"
+                        last_state["updated_at"] = datetime.now(timezone.utc)
+                        last_state["trace"] = [*trace, stop_event]
+                        repository.persist_step(
                             session,
-                            subject=str(last_state.get("quota_subject", "anonymous")),
-                            tokens=total_tokens,
+                            state=last_state,
+                            seq=int(stop_event["seq"]),
+                            event_type="run_stopped",
+                            node="orchestrator",
+                            message="Run stopped by operator",
+                            data={"reason": stop_reason, "actor": stop_actor},
                         )
-                        last_state["quota_daily_used"] = int(quota_row.tokens_used)
-                        last_state["metering_mode"] = metering_mode
-                        last_state["prompt_tokens_total"] = int(last_state.get("prompt_tokens_total", 0)) + prompt_tokens
-                        last_state["completion_tokens_total"] = int(last_state.get("completion_tokens_total", 0)) + completion_tokens
-                        last_state["total_tokens_used"] = int(last_state.get("total_tokens_used", 0)) + total_tokens
+                        yield {
+                            "event": "timeline",
+                            "data": {
+                                "run_id": last_state["run_id"],
+                                "seq": int(stop_event["seq"]),
+                                "status": last_state["status"],
+                                "current_node": last_state["current_node"],
+                                "initial_token_budget": last_state.get("initial_token_budget", 0),
+                                "token_budget_remaining": last_state.get("token_budget_remaining", 0),
+                                "metering_mode": last_state.get("metering_mode", "estimated"),
+                                "prompt_tokens_total": int(last_state.get("prompt_tokens_total", 0)),
+                                "completion_tokens_total": int(last_state.get("completion_tokens_total", 0)),
+                                "total_tokens_used": int(last_state.get("total_tokens_used", 0)),
+                                "quota_subject": str(last_state.get("quota_subject", "")),
+                                "quota_daily_limit": int(last_state.get("quota_daily_limit", settings.quota_daily_tokens)),
+                                "quota_daily_used": int(last_state.get("quota_daily_used", 0)),
+                                "message": stop_event["message"],
+                                "event_type": stop_event["event_type"],
+                                "node": stop_event["node"],
+                                "data": stop_event["data"],
+                            },
+                        }
+                        break
 
-                    logger.info(
-                        "Timeline event emitted",
-                        extra={
-                            "run_id": last_state["run_id"],
-                            "seq": emitted_seq,
-                            "node": str(evt["node"]),
-                            "event_type": str(evt["event_type"]),
-                            "correlation_id": current_request_id(),
-                        },
+                    trace = last_state.get("trace", [])
+                    if trace and trace[-1]["seq"] > emitted_seq:
+                        evt = trace[-1]
+                        emitted_seq = int(evt["seq"])
+                        repository.persist_step(
+                            session,
+                            state=last_state,
+                            seq=emitted_seq,
+                            event_type=str(evt["event_type"]),
+                            node=str(evt["node"]),
+                            message=str(evt["message"]),
+                            data=dict(evt.get("data", {})),
+                        )
+                        event_data = dict(evt.get("data", {}))
+                        if settings.token_ledger_v2 and int(event_data.get("total_tokens", event_data.get("tokens_used", 0)) or 0) > 0:
+                            prompt_tokens = int(event_data.get("prompt_tokens", 0) or 0)
+                            completion_tokens = int(event_data.get("completion_tokens", event_data.get("tokens_used", 0)) or 0)
+                            total_tokens = int(event_data.get("total_tokens", event_data.get("tokens_used", 0)) or 0)
+                            metering_mode = str(event_data.get("metering_mode", "estimated"))
+                            repository.append_token_usage(
+                                session=session,
+                                run_id=last_state["run_id"],
+                                seq=emitted_seq,
+                                node=str(evt["node"]),
+                                provider="ollama",
+                                model=settings.ollama_model,
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=completion_tokens,
+                                total_tokens=total_tokens,
+                                metering_mode=metering_mode,
+                            )
+                            quota_row = repository.consume_quota_tokens(
+                                session,
+                                subject=str(last_state.get("quota_subject", "anonymous")),
+                                tokens=total_tokens,
+                            )
+                            last_state["quota_daily_used"] = int(quota_row.tokens_used)
+                            last_state["metering_mode"] = metering_mode
+                            last_state["prompt_tokens_total"] = int(last_state.get("prompt_tokens_total", 0)) + prompt_tokens
+                            last_state["completion_tokens_total"] = int(last_state.get("completion_tokens_total", 0)) + completion_tokens
+                            last_state["total_tokens_used"] = int(last_state.get("total_tokens_used", 0)) + total_tokens
+
+                        logger.info(
+                            "Timeline event emitted",
+                            extra={
+                                "run_id": last_state["run_id"],
+                                "seq": emitted_seq,
+                                "node": str(evt["node"]),
+                                "event_type": str(evt["event_type"]),
+                                "correlation_id": current_request_id(),
+                            },
+                        )
+
+                        yield {
+                            "event": "timeline",
+                            "data": {
+                                "run_id": last_state["run_id"],
+                                "seq": emitted_seq,
+                                "status": last_state["status"],
+                                "current_node": last_state["current_node"],
+                                "initial_token_budget": last_state.get("initial_token_budget", 0),
+                                "token_budget_remaining": last_state["token_budget_remaining"],
+                                "metering_mode": last_state.get("metering_mode", "estimated"),
+                                "prompt_tokens_total": int(last_state.get("prompt_tokens_total", 0)),
+                                "completion_tokens_total": int(last_state.get("completion_tokens_total", 0)),
+                                "total_tokens_used": int(last_state.get("total_tokens_used", 0)),
+                                "quota_subject": str(last_state.get("quota_subject", "")),
+                                "quota_daily_limit": int(last_state.get("quota_daily_limit", settings.quota_daily_tokens)),
+                                "quota_daily_used": int(last_state.get("quota_daily_used", 0)),
+                                "message": evt["message"],
+                                "event_type": evt["event_type"],
+                                "node": evt["node"],
+                                "data": evt.get("data", {}),
+                            },
+                        }
+                    else:
+                        repository.update_run(session, last_state)
+
+                    if last_state.get("status") == "awaiting_human":
+                        yield {
+                            "event": "awaiting_approval",
+                            "data": {
+                                "run_id": last_state["run_id"],
+                                "status": last_state["status"],
+                                "current_node": last_state["current_node"],
+                                "message": "Run paused for human approval",
+                            },
+                        }
+                        return
+
+                    if last_state.get("status") in TERMINAL:
+                        break
+            except Exception as exc:
+                last_state["status"] = "failed"
+                last_state["current_node"] = "finalize"
+                last_state["updated_at"] = datetime.now(timezone.utc)
+                trace = list(last_state.get("trace", []))
+                error_event = {
+                    "seq": len(trace) + 1,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "event_type": "node_error",
+                    "node": "orchestrator",
+                    "message": "Execution stream failed",
+                    "data": {"error": str(exc)},
+                }
+                last_state["trace"] = [*trace, error_event]
+                try:
+                    repository.persist_step(
+                        session,
+                        state=last_state,
+                        seq=int(error_event["seq"]),
+                        event_type="node_error",
+                        node="orchestrator",
+                        message="Execution stream failed",
+                        data={"error": str(exc)},
                     )
-
-                    yield {
-                        "event": "timeline",
-                        "data": {
-                            "run_id": last_state["run_id"],
-                            "seq": emitted_seq,
-                            "status": last_state["status"],
-                            "current_node": last_state["current_node"],
-                            "initial_token_budget": last_state.get("initial_token_budget", 0),
-                            "token_budget_remaining": last_state["token_budget_remaining"],
-                            "metering_mode": last_state.get("metering_mode", "estimated"),
-                            "prompt_tokens_total": int(last_state.get("prompt_tokens_total", 0)),
-                            "completion_tokens_total": int(last_state.get("completion_tokens_total", 0)),
-                            "total_tokens_used": int(last_state.get("total_tokens_used", 0)),
-                            "quota_subject": str(last_state.get("quota_subject", "")),
-                            "quota_daily_limit": int(last_state.get("quota_daily_limit", settings.quota_daily_tokens)),
-                            "quota_daily_used": int(last_state.get("quota_daily_used", 0)),
-                            "message": evt["message"],
-                            "event_type": evt["event_type"],
-                            "node": evt["node"],
-                            "data": evt.get("data", {}),
-                        },
-                    }
-                else:
+                except Exception as persist_exc:
+                    logger.warning(
+                        "Persisting orchestrator error event failed; updating run state only",
+                        extra={"run_id": last_state.get("run_id", ""), "error": str(persist_exc)},
+                    )
                     repository.update_run(session, last_state)
 
-                if last_state.get("status") == "awaiting_human":
-                    yield {
-                        "event": "awaiting_approval",
-                        "data": {
-                            "run_id": last_state["run_id"],
-                            "status": last_state["status"],
-                            "current_node": last_state["current_node"],
-                            "message": "Run paused for human approval",
-                        },
-                    }
-                    return
-
-                if last_state.get("status") in TERMINAL:
-                    break
-        except Exception as exc:
-            last_state["status"] = "failed"
-            last_state["current_node"] = "finalize"
-            last_state["updated_at"] = datetime.now(timezone.utc)
-            trace = list(last_state.get("trace", []))
-            error_event = {
-                "seq": len(trace) + 1,
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "event_type": "node_error",
-                "node": "orchestrator",
-                "message": "Execution stream failed",
-                "data": {"error": str(exc)},
-            }
-            last_state["trace"] = [*trace, error_event]
-            try:
-                repository.persist_step(
-                    session,
-                    state=last_state,
-                    seq=int(error_event["seq"]),
-                    event_type="node_error",
-                    node="orchestrator",
-                    message="Execution stream failed",
-                    data={"error": str(exc)},
-                )
-            except Exception as persist_exc:
-                logger.warning(
-                    "Persisting orchestrator error event failed; updating run state only",
-                    extra={"run_id": last_state.get("run_id", ""), "error": str(persist_exc)},
-                )
-                repository.update_run(session, last_state)
-
-            yield {
-                "event": "timeline",
-                "data": {
-                    "run_id": last_state["run_id"],
-                    "seq": int(error_event["seq"]),
-                    "status": last_state["status"],
-                    "current_node": last_state["current_node"],
-                    "token_budget_remaining": last_state.get("token_budget_remaining", 0),
-                    "message": error_event["message"],
-                    "event_type": error_event["event_type"],
-                    "node": error_event["node"],
-                    "data": error_event["data"],
-                },
-            }
+                yield {
+                    "event": "timeline",
+                    "data": {
+                        "run_id": last_state["run_id"],
+                        "seq": int(error_event["seq"]),
+                        "status": last_state["status"],
+                        "current_node": last_state["current_node"],
+                        "token_budget_remaining": last_state.get("token_budget_remaining", 0),
+                        "message": error_event["message"],
+                        "event_type": error_event["event_type"],
+                        "node": error_event["node"],
+                        "data": error_event["data"],
+                    },
+                }
 
         yield {
             "event": "run_finished",

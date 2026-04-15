@@ -12,6 +12,7 @@ from app.core.cache import get_cached_response, save_response_to_cache
 from app.core.logging import get_logger
 from app.core.settings import settings
 from app.core.state import AgentState
+from app.core.tracing import safe_trace_span
 
 
 class TraceEvent(TypedDict):
@@ -193,28 +194,36 @@ def _httpx_error_result(state: AgentState, node: str, exc: Exception) -> dict[st
 
 
 def _ollama_generate(state: AgentState, node: str, prompt: str) -> tuple[str, int, int, dict[str, Any]] | dict[str, Any]:
-    try:
-        base_url = settings.ollama_base_url.rstrip("/")
-        response_url = f"{base_url}/api/generate"
-        payload = {
-            "model": settings.ollama_model,
-            "prompt": prompt,
-            "stream": False,
-            "keep_alive": settings.ollama_keep_alive,
-            "options": {
-                "num_predict": _target_num_predict(state, node),
-            },
-        }
-        with httpx.Client() as client:
-            response = client.post(
-                response_url,
-                json=payload,
-                timeout=max(10.0, float(settings.ollama_timeout_seconds)),
-            )
-            response.raise_for_status()
-            body = response.json()
-    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
-        return _httpx_error_result(state, node, exc)
+    with safe_trace_span(
+        "node.ollama_generate",
+        {
+            "run_id": str(state.get("run_id", "")),
+            "node": node,
+            "prompt_length": len(prompt),
+        },
+    ):
+        try:
+            base_url = settings.ollama_base_url.rstrip("/")
+            response_url = f"{base_url}/api/generate"
+            payload = {
+                "model": settings.ollama_model,
+                "prompt": prompt,
+                "stream": False,
+                "keep_alive": settings.ollama_keep_alive,
+                "options": {
+                    "num_predict": _target_num_predict(state, node),
+                },
+            }
+            with httpx.Client() as client:
+                response = client.post(
+                    response_url,
+                    json=payload,
+                    timeout=max(10.0, float(settings.ollama_timeout_seconds)),
+                )
+                response.raise_for_status()
+                body = response.json()
+        except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+            return _httpx_error_result(state, node, exc)
 
     if isinstance(body, dict):
         response_text = str(body.get("response", "")).strip()

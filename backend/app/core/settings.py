@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     upload_context_max_chars: int = Field(default=20000)
     enforce_report_completeness: bool = Field(default=False)
 
+    langsmith_enabled: bool = Field(default=False)
+    langsmith_api_key: str = Field(default="")
+    langsmith_project: str = Field(default="nexus-researcher")
+
     jwt_secret: str = Field(default="")
     jwt_algorithm: str = Field(default="HS256")
     jwt_issuer: str = Field(default="")
