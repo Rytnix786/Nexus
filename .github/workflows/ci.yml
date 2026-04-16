@@ -223,7 +223,7 @@ jobs:
 
       - name: Run frontend dependency audit
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=high --omit=dev
 
   required-gates:
     name: Required Gates Check

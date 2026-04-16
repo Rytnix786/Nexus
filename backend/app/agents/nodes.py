@@ -423,7 +423,7 @@ def researcher_node(state: AgentState) -> dict[str, Any]:
 
     findings, tokens_used, remaining_budget, usage = llm_result
     iteration_count = state["iteration_count"] + 1
-    next_node = "analyst" if iteration_count >= state["max_iterations"] or iteration_count >= 2 else "researcher"
+    next_node = "analyst" if iteration_count >= state["max_iterations"] else "researcher"
 
     result = _success_response(
         state,

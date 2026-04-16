@@ -130,8 +130,9 @@ def test_planner_opens_ollama_trace_span(monkeypatch: pytest.MonkeyPatch):
 def test_researcher_keeps_researching_before_advancing(monkeypatch: pytest.MonkeyPatch):
     _install_fake_client(monkeypatch, "- Finding A\n- Finding B")
 
-    first = nodes.researcher_node(_base_state(plan="Step 1\nStep 2"))
-    second = nodes.researcher_node(_base_state(plan="Step 1\nStep 2", iteration_count=1))
+    first = nodes.researcher_node(_base_state(plan="Step 1\nStep 2", max_iterations=4))
+    second = nodes.researcher_node(_base_state(plan="Step 1\nStep 2", iteration_count=1, max_iterations=4))
+    third = nodes.researcher_node(_base_state(plan="Step 1\nStep 2", iteration_count=3, max_iterations=4))
 
     assert first["iteration_count"] == 1
     assert first["current_node"] == "researcher"
@@ -139,8 +140,12 @@ def test_researcher_keeps_researching_before_advancing(monkeypatch: pytest.Monke
     assert first["trace"][-1]["event_type"] == "research_completed"
 
     assert second["iteration_count"] == 2
-    assert second["current_node"] == "analyst"
+    assert second["current_node"] == "researcher"
     assert second["research_notes"] == ["- Finding A\n- Finding B"]
+
+    assert third["iteration_count"] == 4
+    assert third["current_node"] == "analyst"
+    assert third["research_notes"] == ["- Finding A\n- Finding B"]
 
 
 def test_researcher_includes_web_search_results_in_prompt(monkeypatch: pytest.MonkeyPatch):
