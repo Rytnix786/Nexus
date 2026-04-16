@@ -17,7 +17,7 @@ from app.core.settings import settings
 def auth_enabled_client(client, monkeypatch):
     """Fixture that enables JWT auth for testing."""
     monkeypatch.setattr(settings, "auth_rbac_v2", True)
-    monkeypatch.setattr(settings, "jwt_secret", "test-secret-key")
+    monkeypatch.setattr(settings, "jwt_secret", "test-jwt-secret-key-32-bytes-min")
     monkeypatch.setattr(settings, "require_api_key", False)
     return client
 
@@ -47,7 +47,7 @@ def test_metrics_accepts_valid_admin_jwt(auth_enabled_client):
     """Verify metrics endpoint accepts admin role JWT."""
     token = jwt.encode(
         {"sub": "admin_user", "role": "admin"},
-        "test-secret-key",
+        "test-jwt-secret-key-32-bytes-min",
         algorithm="HS256"
     )
     response = auth_enabled_client.get(
@@ -63,7 +63,7 @@ def test_metrics_accepts_valid_operator_jwt(auth_enabled_client):
     """Verify metrics endpoint accepts operator role JWT."""
     token = jwt.encode(
         {"sub": "operator_user", "role": "operator"},
-        "test-secret-key",
+        "test-jwt-secret-key-32-bytes-min",
         algorithm="HS256"
     )
     response = auth_enabled_client.get(
@@ -79,7 +79,7 @@ def test_metrics_accepts_valid_reviewer_jwt(auth_enabled_client):
     """Verify metrics endpoint accepts reviewer role JWT."""
     token = jwt.encode(
         {"sub": "reviewer_user", "role": "reviewer"},
-        "test-secret-key",
+        "test-jwt-secret-key-32-bytes-min",
         algorithm="HS256"
     )
     response = auth_enabled_client.get(
@@ -94,13 +94,13 @@ def test_metrics_accepts_valid_reviewer_jwt(auth_enabled_client):
 def test_metrics_with_mismatched_jwt_secret(client, monkeypatch):
     """Verify metrics endpoint handles JWT with wrong secret gracefully."""
     monkeypatch.setattr(settings, "auth_rbac_v2", True)
-    monkeypatch.setattr(settings, "jwt_secret", "correct-secret")
+    monkeypatch.setattr(settings, "jwt_secret", "correct-jwt-secret-32-bytes-min")
     monkeypatch.setattr(settings, "require_api_key", False)
     
     # JWT signed with different secret - falls back to default operator role
     token = jwt.encode(
         {"sub": "user", "role": "admin"},
-        "wrong-secret",
+        "wrong-jwt-secret-32-bytes-min",
         algorithm="HS256"
     )
     response = client.get(
@@ -118,14 +118,14 @@ def test_metrics_with_expired_jwt(client, monkeypatch):
     from datetime import datetime, timedelta, timezone
     
     monkeypatch.setattr(settings, "auth_rbac_v2", True)
-    monkeypatch.setattr(settings, "jwt_secret", "test-secret-key")
+    monkeypatch.setattr(settings, "jwt_secret", "test-jwt-secret-key-32-bytes-min")
     monkeypatch.setattr(settings, "require_api_key", False)
     
     # JWT that expired 1 hour ago - falls back to default operator role
     past_time = datetime.now(timezone.utc) - timedelta(hours=1)
     token = jwt.encode(
         {"sub": "user", "role": "admin", "exp": past_time},
-        "test-secret-key",
+        "test-jwt-secret-key-32-bytes-min",
         algorithm="HS256"
     )
     response = client.get(

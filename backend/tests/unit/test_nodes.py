@@ -674,12 +674,20 @@ def test_rerank_output_sorted_by_score():
     query = "database performance optimization"
     result = rerank(query, documents)
     
-    # Verify all results have cross_encoder_score
-    for doc in result:
-        assert "cross_encoder_score" in doc or len(result) == 0
-    
-    # If model is available and scores exist, verify descending order
-    if any("cross_encoder_score" in doc for doc in result):
+    # If cross-encoder model is available, results should have cross_encoder_score and be sorted
+    if result and "cross_encoder_score" in result[0]:
+        # Verify all results have cross_encoder_score
+        for doc in result:
+            assert "cross_encoder_score" in doc, "All reranked documents should have cross_encoder_score"
+        
+        # Verify descending order by cross_encoder_score
         scores = [doc.get("cross_encoder_score", 0) for doc in result]
         assert scores == sorted(scores, reverse=True), "Cross-encoder scores should be sorted descending"
+    else:
+        # If model unavailable, should return original documents (fail-open behavior)
+        assert len(result) <= 3, "Should return at most 3 documents when model unavailable"
+        # Should preserve original structure when falling back
+        for doc in result:
+            assert "text" in doc, "Fallback results should preserve text field"
+            assert "rrf_score" in doc, "Fallback results should preserve rrf_score field"
 

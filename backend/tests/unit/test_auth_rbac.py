@@ -8,12 +8,12 @@ from app.core.settings import settings
 
 def test_require_auth_context_jwt_mode(monkeypatch):
     monkeypatch.setattr(settings, "auth_rbac_v2", True)
-    monkeypatch.setattr(settings, "jwt_secret", "secret")
+    monkeypatch.setattr(settings, "jwt_secret", "test-jwt-secret-key-32-bytes-min")
     monkeypatch.setattr(settings, "jwt_algorithm", "HS256")
     monkeypatch.setattr(settings, "jwt_issuer", "")
     monkeypatch.setattr(settings, "jwt_audience", "")
 
-    token = jwt.encode({"sub": "alice", "role": "reviewer"}, "secret", algorithm="HS256")
+    token = jwt.encode({"sub": "alice", "role": "reviewer"}, "test-jwt-secret-key-32-bytes-min", algorithm="HS256")
     ctx = require_auth_context(authorization=f"Bearer {token}")
     assert ctx.subject == "alice"
     assert ctx.role == "reviewer"
@@ -24,7 +24,7 @@ def test_require_auth_context_accepts_legacy_api_key_header_when_rbac_enabled(mo
     monkeypatch.setattr(settings, "auth_rbac_v2", True)
     monkeypatch.setattr(settings, "require_api_key", True)
     monkeypatch.setattr(settings, "api_key", "test-api-key")
-    monkeypatch.setattr(settings, "jwt_secret", "")
+    monkeypatch.setattr(settings, "jwt_secret", "test-jwt-secret-key-32-bytes-min")
 
     ctx = require_auth_context(x_api_key="test-api-key")
     assert ctx.subject == "apikey_user"
@@ -35,7 +35,7 @@ def test_require_auth_context_accepts_legacy_bearer_api_key_when_rbac_enabled(mo
     monkeypatch.setattr(settings, "auth_rbac_v2", True)
     monkeypatch.setattr(settings, "require_api_key", True)
     monkeypatch.setattr(settings, "api_key", "test-api-key")
-    monkeypatch.setattr(settings, "jwt_secret", "")
+    monkeypatch.setattr(settings, "jwt_secret", "test-jwt-secret-key-32-bytes-min")
 
     ctx = require_auth_context(authorization="Bearer test-api-key")
     assert ctx.subject == "bearer_apikey_user"
