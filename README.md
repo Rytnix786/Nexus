@@ -176,6 +176,54 @@ npm run test:e2e
 npm run build
 ```
 
+## Troubleshooting
+
+### Docker stack will not start
+
+- Confirm Docker Desktop is running and `docker compose ps` shows `backend`, `frontend`, `postgres`, `redis`, and `ollama`.
+- Rebuild the stack from the repository root with `docker compose up --build -d`.
+- Inspect recent failures with `docker compose logs --no-color --tail=100 backend worker frontend`.
+
+### Backend health or migrations fail
+
+- Check `GET /api/health` first to confirm the API is alive.
+- If the database schema looks stale, run `docker compose exec -T backend alembic upgrade head`.
+- If migration checks still fail in CI, validate that `alembic_version` contains a current revision after upgrade.
+
+### Run stream returns 422 or stalls
+
+- Ensure the request body matches the `POST /api/runs/stream` schema and that required auth headers are present when API keys are enabled.
+- Watch backend and worker logs together so you can see both request acceptance and orchestrator execution.
+- If the worker is healthy but the stream is empty, verify Redis connectivity and the queue consumer status.
+
+### Dependency audit or test gates fail
+
+- Re-run backend tests with `python -m pytest tests -q` and frontend tests with `npm run test`.
+- Re-run dependency checks with `pip-audit --strict -r requirements.txt` and `npm audit --audit-level=high --omit=dev`.
+- If `npm ci` or `pip install -r requirements.txt` changes the environment, repeat the tests before pushing.
+
+## Performance Benchmarking
+
+The main published performance target is the SLO for `POST /api/runs/stream`: p95 latency must stay at or below 1200ms excluding model runtime. See `docs/SLO_AND_ALERTING.md` for the full policy.
+
+Suggested local checks:
+
+```bash
+# Baseline API responsiveness
+curl -s -o NUL -w "health_total=%{time_total}\n" http://localhost:8000/api/health
+
+# Measure stream acceptance timing from the API edge
+curl -s -o NUL -w "stream_ttfb=%{time_starttransfer}\n" \
+  -X POST http://localhost:8000/api/runs/stream \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <your-api-key-if-required>" \
+  -d '{"objective":"benchmark run","highImpact":false}'
+```
+
+For repeatable comparisons, run each check several times under the same Docker state and compare the median and p95 values rather than a single sample.
+
+If you need a broader load test, measure the endpoint through an external tool such as `hey`, `wrk`, or `k6` and keep model execution excluded when comparing API overhead.
+
 Dependency audits:
 
 ```bash
