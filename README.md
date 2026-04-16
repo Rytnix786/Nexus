@@ -163,7 +163,7 @@ Backend:
 cd backend
 python -m pytest tests -q
 python -m compileall app
-python -m alembic upgrade head
+alembic upgrade head
 ```
 
 Frontend:

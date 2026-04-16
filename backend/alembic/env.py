@@ -7,10 +7,10 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-# Add the project root to Python path to resolve app imports
-project_root = path.dirname(path.dirname(path.dirname(path.abspath(__file__))))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# Add the backend root to Python path to resolve app imports.
+backend_root = path.dirname(path.dirname(path.abspath(__file__)))
+if backend_root not in sys.path:
+    sys.path.insert(0, backend_root)
 
 from app.core.settings import settings
 from app.db.tables import Base
