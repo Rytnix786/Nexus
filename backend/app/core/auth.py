@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -8,6 +9,8 @@ import jwt
 from fastapi import Header, HTTPException
 
 from app.core.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,7 +76,8 @@ def require_auth_context(
             options={"verify_aud": bool(settings.jwt_audience), "verify_iss": bool(settings.jwt_issuer)},
         )
     except Exception as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
+        logger.warning("JWT validation failed", extra={"error_type": type(exc).__name__, "error": str(exc)})
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
 
     subject = str(payload.get("sub") or payload.get("email") or "user")
     role = str(payload.get("role") or payload.get("roles") or "operator")

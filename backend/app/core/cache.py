@@ -2,18 +2,62 @@
 
 Simple in-memory cache indexed by hash(query + top_context).
 Stores LLM responses to avoid redundant generations.
+Cache enforces max size and entry TTL to prevent unbounded memory growth.
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Module-level in-memory cache: {cache_key: response}
-_response_cache: dict[str, str] = {}
+# Configuration
+CACHE_MAX_ENTRIES = 1000  # Max number of cache entries
+CACHE_MAX_SIZE_MB = 100  # Max total cache size in MB
+CACHE_ENTRY_TTL_SECONDS = 3600  # 1 hour TTL for each entry
+
+# Module-level in-memory cache: {cache_key: (response, timestamp)}
+_response_cache: dict[str, tuple[str, float]] = {}
+
+
+def _cleanup_expired_and_oversized() -> None:
+    """Remove expired entries and enforce size limits.
+    
+    Called before each cache operation to maintain bounds:
+    - Remove entries older than TTL
+    - Remove oldest entries if size/count limits exceeded
+    """
+    now = time.time()
+    
+    # Remove expired entries
+    expired_keys = [k for k, (_, ts) in _response_cache.items() if now - ts > CACHE_ENTRY_TTL_SECONDS]
+    for k in expired_keys:
+        del _response_cache[k]
+        logger.debug("Removed expired cache entry", extra={"cache_key": k[:16]})
+    
+    # Remove oldest entries if too many
+    if len(_response_cache) > CACHE_MAX_ENTRIES:
+        remove_count = len(_response_cache) - CACHE_MAX_ENTRIES
+        sorted_entries = sorted(_response_cache.items(), key=lambda x: x[1][1])[:remove_count]
+        for k, _ in sorted_entries:
+            del _response_cache[k]
+        logger.debug("Removed oldest cache entries by count", extra={"removed": remove_count})
+    
+    # Remove oldest entries if too large
+    total_size_bytes = sum(len(v[0]) for v in _response_cache.values())
+    if total_size_bytes > CACHE_MAX_SIZE_MB * 1024 * 1024:
+        sorted_entries = sorted(_response_cache.items(), key=lambda x: x[1][1])
+        removed = 0
+        for k, _ in sorted_entries:
+            del _response_cache[k]
+            removed += 1
+            total_size_bytes = sum(len(v[0]) for v in _response_cache.values())
+            if total_size_bytes <= CACHE_MAX_SIZE_MB * 1024 * 1024:
+                break
+        logger.debug("Removed oldest cache entries by size", extra={"removed": removed})
 
 
 def _make_cache_key(query: str, top_context: str) -> str:
@@ -40,15 +84,22 @@ def get_cached_response(query: str, top_context: str) -> str | None:
     Returns:
         Cached response string if hit, None if miss
     """
-    cache_key = _make_cache_key(query, top_context)
-    cached = _response_cache.get(cache_key)
+    _cleanup_expired_and_oversized()
     
-    if cached:
-        logger.debug(
-            "Cache hit",
-            extra={"cache_key": cache_key[:16], "value_length": len(cached), "total_cached": len(_response_cache)}
-        )
-        return cached
+    cache_key = _make_cache_key(query, top_context)
+    cached_entry = _response_cache.get(cache_key)
+    
+    if cached_entry:
+        cached_response, timestamp = cached_entry
+        age_seconds = time.time() - timestamp
+        if age_seconds <= CACHE_ENTRY_TTL_SECONDS:
+            logger.debug(
+                "Cache hit",
+                extra={"cache_key": cache_key[:16], "value_length": len(cached_response), "total_cached": len(_response_cache), "age_seconds": int(age_seconds)}
+            )
+            return cached_response
+        else:
+            del _response_cache[cache_key]
     
     logger.debug(
         "Cache miss",
@@ -65,8 +116,10 @@ def save_response_to_cache(query: str, top_context: str, response: str) -> None:
         top_context: Top retrieved context or user-uploaded context
         response: LLM-generated response text
     """
+    _cleanup_expired_and_oversized()
+    
     cache_key = _make_cache_key(query, top_context)
-    _response_cache[cache_key] = response
+    _response_cache[cache_key] = (response, time.time())
     
     logger.debug(
         "Cached response",
@@ -85,5 +138,8 @@ def get_cache_stats() -> dict[str, Any]:
     """Return cache statistics."""
     return {
         "total_entries": len(_response_cache),
-        "approx_size_kb": sum(len(v) for v in _response_cache.values()) // 1024,
+        "approx_size_kb": sum(len(v[0]) for v in _response_cache.values()) // 1024,
+        "max_entries": CACHE_MAX_ENTRIES,
+        "max_size_mb": CACHE_MAX_SIZE_MB,
+        "ttl_seconds": CACHE_ENTRY_TTL_SECONDS,
     }

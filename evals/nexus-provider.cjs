@@ -40,11 +40,21 @@ async function sleep(ms) {
 }
 
 async function startRunAndGetRunId(apiBase, apiKey, payload) {
+  // Generate JWT token for authentication
+  const jwtSecret = process.env.JWT_SECRET || 'replace_with_strong_jwt_secret';
+  const jwt = require('jsonwebtoken');
+  
+  const token = jwt.sign(
+    { sub: `promptfoo-evaluator-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, role: 'operator' },
+    jwtSecret,
+    { algorithm: 'HS256', expiresIn: '1h' }
+  );
+
   const response = await fetch(`${apiBase}/api/runs/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': apiKey,
+      'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });
@@ -105,11 +115,21 @@ async function pollRunUntilTerminal(apiBase, apiKey, runId, maxWaitMs = 180000) 
   const startedAt = Date.now();
   let latest = null;
 
+  // Generate JWT token for authentication
+  const jwtSecret = process.env.JWT_SECRET || 'replace_with_strong_jwt_secret';
+  const jwt = require('jsonwebtoken');
+  
+  const token = jwt.sign(
+    { sub: `promptfoo-evaluator-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, role: 'operator' },
+    jwtSecret,
+    { algorithm: 'HS256', expiresIn: '1h' }
+  );
+
   while (Date.now() - startedAt < maxWaitMs) {
     const response = await fetch(`${apiBase}/api/runs/${runId}`, {
       method: 'GET',
       headers: {
-        'X-API-Key': apiKey,
+        'Authorization': `Bearer ${token}`,
       },
     });
 

@@ -44,7 +44,7 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
       WEB_SEARCH_ENABLED: ${WEB_SEARCH_ENABLED:-true}
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-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}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:?set TAVILY_API_KEY before starting the stack}
       TAVILY_BASE_URL: ${TAVILY_BASE_URL:-https://api.tavily.com}
       TAVILY_TIMEOUT_SECONDS: ${TAVILY_TIMEOUT_SECONDS:-20}
       APP_ENV: production
@@ -94,7 +94,7 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
       WEB_SEARCH_ENABLED: ${WEB_SEARCH_ENABLED:-true}
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-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}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:?set TAVILY_API_KEY before starting the stack}
       TAVILY_BASE_URL: ${TAVILY_BASE_URL:-https://api.tavily.com}
       TAVILY_TIMEOUT_SECONDS: ${TAVILY_TIMEOUT_SECONDS:-20}
       APP_ENV: production

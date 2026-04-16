@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     default_token_budget: int = Field(default=8000)
     developer_mode: bool = Field(default=False)
 
+    # Node-specific token limits
+    token_limit_planner: int = Field(default=280)
+    token_limit_researcher: int = Field(default=420)
+    token_limit_analyst: int = Field(default=520)
+    token_limit_writer: int = Field(default=900)
+    token_limit_critic: int = Field(default=420)
+    token_limit_min: int = Field(default=64)
+    token_limit_max: int = Field(default=2000)
+    
+    # Writer output requirements
+    writer_min_draft_length: int = Field(default=700)
+    writer_min_completion_length: int = Field(default=900)
+
     allow_unsafe_python_tool: bool = Field(default=False)
     require_api_key: bool = Field(default=True)
     api_key: str = Field(default="")

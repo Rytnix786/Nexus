@@ -48,6 +48,24 @@ limiter = create_rate_limiter(settings)
 TERMINAL_STATUSES = {"completed", "failed", "stopped", "rejected", "timeout", "budget_exhausted"}
 
 
+def _validate_run_id(run_id: str) -> None:
+    """Validate run_id format at API boundary.
+    
+    run_id must be:
+    - non-empty and max 64 characters
+    - alphanumeric (letters, digits, hyphens, underscores)
+    """
+    if not run_id or not isinstance(run_id, str):
+        raise HTTPException(status_code=400, detail="Invalid run_id format")
+    
+    if len(run_id) > 64:
+        raise HTTPException(status_code=400, detail="run_id exceeds maximum length of 64")
+    
+    # Check for safe characters: alphanumeric, hyphen, underscore
+    if not all(c.isalnum() or c in '-_' for c in run_id):
+        raise HTTPException(status_code=400, detail="run_id contains invalid characters")
+
+
 def _as_utc(value: datetime | str | None) -> datetime | None:
     if value is None:
         return None
@@ -65,6 +83,7 @@ def _as_utc(value: datetime | str | None) -> datetime | None:
 
 
 def _extract_upload_text(filename: str, payload: bytes) -> str:
+    """Extract text from uploaded file with guaranteed cleanup."""
     suffix = Path(filename or "").suffix.lower()
 
     if suffix == ".pdf" and PdfReader is not None:
@@ -73,21 +92,33 @@ def _extract_upload_text(filename: str, payload: bytes) -> str:
         return "\n".join(chunks).strip()
 
     if suffix == ".docx" and docx2txt is not None:
-        with NamedTemporaryFile(suffix=".docx", delete=False) as tmp_file:
-            tmp_file.write(payload)
-            temp_path = tmp_file.name
+        temp_path = None
         try:
-            return str(docx2txt.process(temp_path) or "").strip()
+            with NamedTemporaryFile(suffix=".docx", delete=False) as tmp_file:
+                tmp_file.write(payload)
+                temp_path = tmp_file.name
+            result = str(docx2txt.process(temp_path) or "").strip()
+            return result
+        except Exception as exc:
+            logger.error("Failed to extract docx text", extra={"filename": filename, "error": str(exc)})
+            raise HTTPException(status_code=422, detail="Failed to extract text from document") from exc
         finally:
-            try:
-                Path(temp_path).unlink(missing_ok=True)
-            except OSError as exc:
-                logger.warning("Failed to remove temporary upload file", extra={"path": temp_path, "error": str(exc)})
+            # Guarantee cleanup even if extraction fails
+            if temp_path:
+                try:
+                    Path(temp_path).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Failed to remove temporary upload file", extra={"path": temp_path, "error": str(exc)})
 
     try:
         return payload.decode("utf-8").strip()
-    except UnicodeDecodeError:
-        return payload.decode("latin-1", errors="ignore").strip()
+    except UnicodeDecodeError as exc:
+        logger.warning("UTF-8 decoding failed, falling back to latin-1", extra={"error": str(exc)})
+        try:
+            return payload.decode("latin-1").strip()
+        except (UnicodeDecodeError, AttributeError) as fallback_exc:
+            logger.error("Latin-1 decoding also failed", extra={"error": str(fallback_exc)})
+            return payload.decode("latin-1", errors="replace").strip()  # Replace with U+FFFD
 
 
 @router.post("/uploads")
@@ -363,6 +394,7 @@ def resume_run_stream(
 ) -> StreamingResponse:
     enforce_role(auth, {"admin", "reviewer"})
     throttle(request)
+    _validate_run_id(run_id)
 
     logger.info(
         "Run resume requested",

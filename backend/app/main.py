@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import DatabaseError, OperationalError
 
 from app.api.routes import router
 from app.core.logging import configure_logging, get_logger, request_id_var
@@ -105,11 +107,11 @@ def on_startup() -> None:
                 if strict_migrations:
                     raise RuntimeError(msg)
                 logger.warning(msg)
-        except Exception:
+        except (DatabaseError, OperationalError, FileNotFoundError, Exception) as exc:
             msg = "Run 'alembic upgrade head' before starting in production"
             if strict_migrations:
-                raise RuntimeError(msg)
-            logger.warning(msg)
+                raise RuntimeError(msg) from exc
+            logger.warning(msg, extra={"error": type(exc).__name__})
 
 
 app.include_router(router)

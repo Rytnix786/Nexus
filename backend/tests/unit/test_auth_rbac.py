@@ -40,3 +40,26 @@ def test_require_auth_context_accepts_legacy_bearer_api_key_when_rbac_enabled(mo
     ctx = require_auth_context(authorization="Bearer test-api-key")
     assert ctx.subject == "bearer_apikey_user"
     assert ctx.role == "admin"
+
+
+def test_jwt_validation_error_does_not_leak_details(monkeypatch):
+    """Verify JWT validation exceptions do not expose error details to client."""
+    from fastapi import HTTPException
+    
+    monkeypatch.setattr(settings, "auth_rbac_v2", True)
+    monkeypatch.setattr(settings, "jwt_secret", "test-jwt-secret-key-32-bytes-min")
+    monkeypatch.setattr(settings, "jwt_algorithm", "HS256")
+    monkeypatch.setattr(settings, "jwt_issuer", "")
+    monkeypatch.setattr(settings, "jwt_audience", "")
+
+    # Test with expired/invalid token
+    invalid_token = "invalid.token.value"
+    try:
+        require_auth_context(authorization=f"Bearer {invalid_token}")
+        assert False, "Expected HTTPException"
+    except HTTPException as exc:
+        # Verify error detail is generic, not including exception type or message
+        assert exc.detail == "Invalid token"
+        assert "JSONDecodeError" not in exc.detail
+        assert "ExpiredSignatureError" not in exc.detail
+        assert exc.status_code == 401

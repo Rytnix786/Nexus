@@ -8,7 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.db.tables import Base, IdempotencyRecord, QuotaWindow, RunCheckpoint, RunEvent, RunRecord, TokenUsageLedger
+
+logger = get_logger(__name__)
 
 
 class _QuotaStub:
@@ -263,7 +266,12 @@ def get_token_totals(session: Session, run_id: str) -> dict[str, Any]:
     }
 
 
-def get_or_create_daily_quota(session: Session, subject: str) -> QuotaWindow:
+def get_or_create_daily_quota(session: Session, subject: str) -> QuotaWindow | _QuotaStub:
+    """Get or create daily quota window for subject.
+    
+    Returns a stub with zero balance if table initialization fails,
+    allowing quota checks to degrade gracefully.
+    """
     now = datetime.now(timezone.utc)
     day_start, day_end = _quota_window_bounds(now)
     stmt = select(QuotaWindow).where(
@@ -271,29 +279,47 @@ def get_or_create_daily_quota(session: Session, subject: str) -> QuotaWindow:
         QuotaWindow.window_start == day_start,
         QuotaWindow.window_end == day_end,
     )
+    
+    # Try to query existing quota
     try:
         existing = session.scalar(stmt)
-    except OperationalError:
-        bind = session.get_bind()
-        if bind is not None:
-            Base.metadata.create_all(bind, tables=[QuotaWindow.__table__])
+        if existing:
+            return existing
+    except OperationalError as exc:
+        logger.warning("Failed to query quota window; attempting table creation", extra={"error": str(exc), "subject": subject})
+        # Try to create the table
         try:
-            existing = session.scalar(stmt)
-        except OperationalError:
-            return _QuotaStub(subject)  # type: ignore[return-value]
-    if existing:
-        return existing
-    created = QuotaWindow(
-        subject=subject,
-        window_start=day_start,
-        window_end=day_end,
-        tokens_used=0,
-        updated_at=now,
-    )
-    session.add(created)
-    session.commit()
-    session.refresh(created)
-    return created
+            bind = session.get_bind()
+            if bind is not None:
+                Base.metadata.create_all(bind, tables=[QuotaWindow.__table__])
+            # Retry query after table creation
+            try:
+                existing = session.scalar(stmt)
+                if existing:
+                    return existing
+            except OperationalError as retry_exc:
+                logger.error("Failed to query quota even after table creation", extra={"error": str(retry_exc), "subject": subject})
+                return _QuotaStub(subject)
+        except Exception as create_exc:
+            logger.error("Failed to create quota table", extra={"error": str(create_exc), "subject": subject})
+            return _QuotaStub(subject)
+    
+    # Create new quota window
+    try:
+        created = QuotaWindow(
+            subject=subject,
+            window_start=day_start,
+            window_end=day_end,
+            tokens_used=0,
+            updated_at=now,
+        )
+        session.add(created)
+        session.commit()
+        session.refresh(created)
+        return created
+    except OperationalError as exc:
+        logger.error("Failed to create quota window", extra={"error": str(exc), "subject": subject})
+        return _QuotaStub(subject)
 
 
 def get_existing_daily_quota(session: Session, subject: str) -> QuotaWindow | None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 import httpx
 
@@ -27,43 +27,47 @@ class TraceEvent(TypedDict):
 logger = get_logger(__name__)
 
 
+# ─── Writer output section patterns ───────────────────────────────────────
+DRAFT_REQUIRED_SECTIONS_PARTIAL = [
+    r"\bsummary\b",
+    r"\bkey findings\b",
+    r"\brecommendations\b",
+]
+
+DRAFT_REQUIRED_SECTIONS_COMPLETE = [
+    r"\bsummary\b",
+    r"\bkey findings\b",
+    r"\brecommendations\b",
+    r"\brisks and mitigations\b",
+    r"\bassumptions and unknowns\b",
+    r"\bnext-step execution plan\b",
+]
+
+
 def _target_num_predict(state: AgentState, node: str) -> int:
-    base = max(64, int(settings.ollama_num_predict))
+    base = max(settings.token_limit_min, int(settings.ollama_num_predict))
     node_overrides = {
-        "planner": min(base, 280),
-        "researcher": max(base, 420),
-        "analyst": max(base, 520),
-        "writer": max(base, 900),
-        "critic": max(base, 420),
+        "planner": min(base, settings.token_limit_planner),
+        "researcher": max(base, settings.token_limit_researcher),
+        "analyst": max(base, settings.token_limit_analyst),
+        "writer": max(base, settings.token_limit_writer),
+        "critic": max(base, settings.token_limit_critic),
     }
     requested = node_overrides.get(node, base)
     remaining_budget = int(state.get("token_budget_remaining", requested) or requested)
-    budget_cap = max(64, min(remaining_budget, 2000))
-    return max(64, min(requested, budget_cap))
+    budget_cap = max(settings.token_limit_min, min(remaining_budget, settings.token_limit_max))
+    return max(settings.token_limit_min, min(requested, budget_cap))
 
 
 def _writer_output_needs_completion(draft: str) -> bool:
     text = draft.lower()
-    required_sections = [
-        r"\bsummary\b",
-        r"\bkey findings\b",
-        r"\brecommendations\b",
-    ]
-    present = sum(1 for pattern in required_sections if re.search(pattern, text))
-    return present < len(required_sections) or len(draft.strip()) < 700
+    present = sum(1 for pattern in DRAFT_REQUIRED_SECTIONS_PARTIAL if re.search(pattern, text))
+    return present < len(DRAFT_REQUIRED_SECTIONS_PARTIAL) or len(draft.strip()) < settings.writer_min_draft_length
 
 
 def _draft_is_complete(draft: str) -> bool:
     text = draft.lower()
-    required_sections = [
-        r"\bsummary\b",
-        r"\bkey findings\b",
-        r"\brecommendations\b",
-        r"\brisks and mitigations\b",
-        r"\bassumptions and unknowns\b",
-        r"\bnext-step execution plan\b",
-    ]
-    return all(re.search(pattern, text) for pattern in required_sections) and len(draft.strip()) >= 900
+    return all(re.search(pattern, text) for pattern in DRAFT_REQUIRED_SECTIONS_COMPLETE) and len(draft.strip()) >= settings.writer_min_completion_length
 
 
 def _uploaded_context_block(state: AgentState, max_chars: int = 2400) -> str:
@@ -108,8 +112,48 @@ def _trim_context(text: str, max_chars: int = 800) -> str:
     return clean[:max_chars].rstrip() + "..."
 
 
+def _validate_trace(trace_raw: Any) -> list[TraceEvent]:
+    """Validate and normalize trace events from state.
+    
+    Returns a list of valid TraceEvent objects, silently filtering out
+    any invalid entries to prevent corruption from propagating.
+    """
+    if not isinstance(trace_raw, list):
+        logger.warning("Invalid trace format: expected list", extra={"type": type(trace_raw).__name__})
+        return []
+    
+    validated: list[TraceEvent] = []
+    for item in trace_raw:
+        if not isinstance(item, dict):
+            logger.warning("Invalid trace item: expected dict", extra={"type": type(item).__name__})
+            continue
+        
+        # Validate required fields
+        required_keys = {"seq", "ts", "event_type", "node", "message", "data"}
+        if not all(k in item for k in required_keys):
+            missing = required_keys - set(item.keys())
+            logger.warning("Invalid trace item: missing keys", extra={"missing": list(missing)})
+            continue
+        
+        try:
+            validated_event: TraceEvent = {
+                "seq": int(item["seq"]),
+                "ts": str(item["ts"]),
+                "event_type": str(item["event_type"]),
+                "node": str(item["node"]),
+                "message": str(item["message"]),
+                "data": dict(item.get("data", {})),
+            }
+            validated.append(validated_event)
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to validate trace item", extra={"error": str(e)})
+            continue
+    
+    return validated
+
+
 def _append_trace(state: AgentState, node: str, event_type: str, message: str, data: dict[str, Any]) -> list[TraceEvent]:
-    trace = cast(list[TraceEvent], list(state.get("trace", [])))
+    trace = _validate_trace(state.get("trace", []))
     event: TraceEvent = {
         "seq": len(trace) + 1,
         "ts": datetime.now(timezone.utc).isoformat(),
