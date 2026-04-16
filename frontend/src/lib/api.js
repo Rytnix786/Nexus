@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 let runtimeToken = '';
 let runtimeIdempotencyPrefix = '';
 
@@ -37,13 +37,31 @@ export async function getRunTimeline(runId) {
 }
 
 export async function stopRun(runId, payload = {}) {
-  const res = await fetch(`${API_BASE}/runs/${runId}/stop`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw await buildHttpError('Stop run failed', res);
-  return res.json();
+  const url = `${API_BASE}/runs/${runId}/stop`;
+  const token = runtimeToken || '<no-token>';
+  console.log('[stopRun] Request:', { url, runId, payload, hasToken: !!runtimeToken, token: token.substring(0, 20) + '...' });
+  
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    console.log('[stopRun] Response status:', res.status, res.statusText);
+    
+    if (!res.ok) {
+      const error = await buildHttpError('Stop run failed', res);
+      console.error('[stopRun] API Error:', error.message);
+      throw error;
+    }
+    
+    const result = await res.json();
+    console.log('[stopRun] Success:', result);
+    return result;
+  } catch (err) {
+    console.error('[stopRun] Network/Parse Error:', err.message || String(err), err);
+    throw err;
+  }
 }
 
 export async function listRuns({

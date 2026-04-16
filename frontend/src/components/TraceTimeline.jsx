@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Loader2, FileText, Database, BookOpen, Globe, Terminal, CheckCircle2 } from 'lucide-react';
+import { Check, Loader2, FileText, Database, BookOpen, Globe, Terminal, CheckCircle2, Square } from 'lucide-react';
 import clsx from 'clsx';
 import { useNexusApp } from '../state/NexusAppContext';
 import ApprovalStation from './ApprovalStation';
@@ -43,7 +43,10 @@ export default function TraceTimeline({ runStream = {} }) {
   // Auto-scroll to bottom only when not manually scrolled up
   useEffect(() => {
     if (userScrolledUpRef.current) return;
-    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const anchor = bottomAnchorRef.current;
+    if (anchor && typeof anchor.scrollIntoView === 'function') {
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
   }, [sortedEvents]);
 
   // If status is completed, show completion message with CTA to Results tab
@@ -92,13 +95,13 @@ export default function TraceTimeline({ runStream = {} }) {
   }
 
   return (
-    <div className="flex gap-10 h-full min-h-0 overflow-hidden pb-10 px-8">
+    <div className="flex gap-10 h-full min-h-0 overflow-hidden pb-10 px-8 relative">
       {/* Visual Accents */}
       <div className="fixed top-[-10%] right-[-5%] w-[40vw] h-[40vw] rounded-full bg-primary/10 blur-[120px] pointer-events-none -z-10"></div>
       <div className="fixed bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] rounded-full bg-secondary/10 blur-[100px] pointer-events-none -z-10"></div>
 
       {/* Main Timeline Column */}
-      <section className="flex-1 min-h-0 flex flex-col gap-6" style={{maxWidth: 'calc(100vw - 32rem)'}}>
+      <section className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden" style={{maxWidth: 'calc(100vw - 32rem)'}}>
         <div className="flex items-center justify-between animate-slide-in">
           <div>
             <h1 className="text-3xl font-bold font-headline tracking-tight text-on-surface">

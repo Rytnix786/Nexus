@@ -48,7 +48,10 @@ export default function Navbar({ currentTab = 'dashboard', onTabChange, onStartR
           </div>
         )}
         <div className="flex gap-4">
-          <Settings className="w-6 h-6 text-on-surface-variant cursor-pointer hover:text-primary transition-colors" />
+          <Settings
+            className="w-6 h-6 text-on-surface-variant cursor-pointer hover:text-primary transition-colors"
+            onClick={() => onTabChange('settings')}
+          />
           <Bell className="w-6 h-6 text-on-surface-variant cursor-pointer hover:text-primary transition-colors" />
         </div>
         <button 

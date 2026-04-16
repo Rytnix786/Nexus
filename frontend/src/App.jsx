@@ -9,6 +9,7 @@ import SettingsPanel from './components/SettingsPanel';
 import ModelsPanel from './components/ModelsPanel';
 import LibraryPanel from './components/LibraryPanel';
 import ResultsPanel from './components/ResultsPanel';
+import SystemMetricsPanel from './components/SystemMetricsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { NexusAppProvider, useNexusApp } from './state/NexusAppContext';
 
@@ -35,12 +36,21 @@ function AppShell() {
     setDateFrom,
     dateTo,
     setDateTo,
+    systemMetrics,
+    systemMetricsLoading,
+    refreshSystemMetrics,
     runsError,
     runStream,
     selectRun,
     selectedResultRunId,
     setSelectedResultRunId,
   } = useNexusApp();
+  const [statusPanelOpen, setStatusPanelOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    if (currentTab !== 'status') return;
+    void refreshSystemMetrics();
+  }, [currentTab, refreshSystemMetrics]);
 
   const shellRunStream = {
     ...runStream,
@@ -73,7 +83,7 @@ function AppShell() {
         authToken={authToken}
       />
 
-      <main className="ml-72 pt-20 h-screen overflow-hidden neural-bg relative">
+      <main className="ml-72 pt-20 h-screen overflow-hidden neural-bg relative flex flex-col">
         {runsError && (
           <div className="mx-auto w-full max-w-7xl px-8 pt-4 text-sm text-rose-200">
             {runsError}
@@ -92,7 +102,7 @@ function AppShell() {
 
         {currentTab === 'active' && (
           <ErrorBoundary>
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden w-full">
               <TraceTimeline runStream={shellRunStream} />
             </div>
           </ErrorBoundary>
@@ -144,6 +154,18 @@ function AppShell() {
           <ErrorBoundary>
             <SettingsPanel />
           </ErrorBoundary>
+        )}
+        {currentTab === 'status' && (
+          <div className="p-8 h-full overflow-y-auto custom-scrollbar relative z-10 w-full max-w-7xl mx-auto">
+            <ErrorBoundary>
+              <SystemMetricsPanel
+                metrics={systemMetrics}
+                loading={systemMetricsLoading}
+                open={statusPanelOpen}
+                onToggle={() => setStatusPanelOpen((prev) => !prev)}
+              />
+            </ErrorBoundary>
+          </div>
         )}
         {currentTab === 'models' && (
           <ErrorBoundary>

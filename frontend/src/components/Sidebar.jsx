@@ -2,6 +2,7 @@ import React from 'react';
 import { LayoutGrid, Zap, History, Cpu, Settings, FileText, Activity, BookOpen, Boxes, ScrollText } from 'lucide-react';
 import clsx from 'clsx';
 import { prettyStatus, relativeTimeLabel } from './shared';
+import { API_BASE } from '../lib/api';
 
 export default function Sidebar({
   currentTab = 'dashboard',
@@ -20,11 +21,16 @@ export default function Sidebar({
     { id: 'history', label: 'History', icon: History },
     { id: 'agents', label: 'Agent Pool', icon: Cpu },
     { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'status', label: 'System Status', icon: Activity },
     { id: 'models', label: 'Models', icon: Boxes },
     { id: 'library', label: 'Library', icon: BookOpen },
   ];
 
   const visibleRuns = Array.isArray(recentRuns) ? recentRuns.slice(0, 6) : [];
+  // Construct documentation URL - strip /api suffix if present, append /docs
+  const apiBaseUrl = String(API_BASE || 'http://localhost:8000/api').trim();
+  const baseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
+  const docsHref = `${baseUrl}/docs`;
 
   return (
     <aside className="fixed left-0 top-0 h-full w-72 flex flex-col gap-6 overflow-y-auto border-r border-[#46484e]/15 bg-[#0c0e13] p-6 pt-28">
@@ -106,14 +112,24 @@ export default function Sidebar({
       </section>
 
       <div className="mt-auto space-y-2">
-        <a className="flex items-center gap-3 px-4 py-2 text-sm text-[#f3f3fb]/60 transition-colors hover:text-primary" href="#">
+        <button
+          type="button"
+          onClick={() => {
+            window.open(docsHref, '_blank', 'noopener,noreferrer');
+          }}
+          className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-[#f3f3fb]/60 transition-colors hover:text-primary"
+        >
           <FileText className="w-4 h-4 scale-75" />
           <span>Documentation</span>
-        </a>
-        <a className="flex items-center gap-3 px-4 py-2 text-sm text-[#f3f3fb]/60 transition-colors hover:text-primary" href="#">
+        </button>
+        <button
+          type="button"
+          onClick={() => onTabChange('status')}
+          className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-[#f3f3fb]/60 transition-colors hover:text-primary"
+        >
           <Activity className="w-4 h-4 scale-75" />
           <span>System Status</span>
-        </a>
+        </button>
       </div>
     </aside>
   );

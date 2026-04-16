@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, Shield, Key, SlidersHorizontal, Database, AlertCircle } from 'lucide-react';
+import { API_BASE } from '../lib/api';
 
 function StatusBadge({ status, label }) {
   const isHealthy = status === 'healthy';
@@ -21,17 +22,20 @@ export default function SettingsPanel() {
     const fetchHealth = async () => {
       try {
         const authToken = localStorage.getItem('nexus.authToken') || '';
-        const res = await fetch('/api/health/ratelimit', {
+        const res = await fetch(`${API_BASE}/health/ratelimit`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         });
         if (res.ok) {
           const data = await res.json();
           setHealthData(data);
+          setError(null);
         } else {
-          setError(`Health check failed: ${res.status}`);
+          setHealthData(null);
+          setError(null);
         }
       } catch (err) {
-        setError(`Error fetching health: ${String(err.message || err)}`);
+        setHealthData(null);
+        setError(null);
       } finally {
         setLoading(false);
       }
@@ -94,19 +98,26 @@ export default function SettingsPanel() {
         <section className="glass-panel p-8 rounded-3xl border border-outline-variant/20">
           <div className="flex items-center gap-3 mb-6">
             <Database className="text-primary w-5 h-5" />
-            <h2 className="text-xl font-headline font-bold">Data Sources</h2>
+            <h2 className="text-xl font-headline font-bold">Rate Limiting & Health</h2>
           </div>
-          <p className="text-sm text-on-surface-variant mb-4">PostgreSQL and Redis health status:</p>
+          <p className="text-sm text-on-surface-variant mb-4">Redis and rate limiting status:</p>
           <div className="flex flex-wrap gap-4">
              {loading ? (
                <div className="text-xs text-on-surface-variant">Loading...</div>
              ) : healthData ? (
                <>
-                 <StatusBadge status={healthData.postgres_available ? 'healthy' : 'unhealthy'} label="PostgreSQL Connected" />
-                 <StatusBadge status={healthData.redis_available ? 'healthy' : 'unhealthy'} label="Redis Active" />
+                 <StatusBadge status={healthData.redis_available ? 'healthy' : 'unhealthy'} label="Redis Available" />
+                 <div className="text-sm text-on-surface-variant">
+                   Rate limit: <span className="font-bold text-white">{healthData.limit_per_minute}/min</span>
+                 </div>
+                 {healthData.fail_open_count > 0 && (
+                   <div className="text-xs text-amber-200 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30">
+                     Fail-open count: {healthData.fail_open_count}
+                   </div>
+                 )}
                </>
              ) : (
-               <div className="text-xs text-on-surface-variant">Unable to fetch health status</div>
+               <div className="text-xs text-on-surface-variant">Rate limit data unavailable</div>
              )}
           </div>
         </section>

@@ -4,16 +4,22 @@ import '@xyflow/react/dist/style.css';
 import clsx from 'clsx';
 import { Network } from 'lucide-react';
 
-const initialNodes = [
-  { id: 'planner', position: { x: 100, y: 50 }, data: { label: 'Planner' } },
-  { id: 'researcher', position: { x: 100, y: 150 }, data: { label: 'Researcher' } },
-  { id: 'analyst', position: { x: 100, y: 250 }, data: { label: 'Analyst' } },
-  { id: 'refusal', position: { x: 100, y: 300 }, data: { label: 'Refusal Gate' } },
-  { id: 'writer', position: { x: 100, y: 350 }, data: { label: 'Writer' } },
-  { id: 'human_approval', position: { x: -50, y: 450 }, data: { label: 'Human Approval' } },
-  { id: 'critic', position: { x: 250, y: 450 }, data: { label: 'Critic' } },
-  { id: 'finalize', position: { x: 100, y: 550 }, data: { label: 'Finalize' } },
+const NODE_META = [
+  { id: 'planner', label: 'Planner', x: 110, y: 40 },
+  { id: 'researcher', label: 'Researcher', x: 110, y: 120 },
+  { id: 'analyst', label: 'Analyst', x: 110, y: 200 },
+  { id: 'writer', label: 'Writer', x: 110, y: 280 },
+  { id: 'critic', label: 'Critic', x: 260, y: 360 },
+  { id: 'human_approval', label: 'Human Approval', x: -40, y: 360 },
+  { id: 'refusal', label: 'Refusal Gate', x: 110, y: 360 },
+  { id: 'finalize', label: 'Finalize', x: 110, y: 460 },
 ];
+
+const initialNodes = NODE_META.map((item) => ({
+  id: item.id,
+  position: { x: item.x, y: item.y },
+  data: { label: item.label },
+}));
 
 const initialEdges = [
   { id: 'e-p-r', source: 'planner', target: 'researcher' },
@@ -29,12 +35,14 @@ const initialEdges = [
 ];
 
 export default function AgentGraph({ runStream = {} }) {
-  const currentNode = String(runStream.currentNode || '');
+  const rawCurrentNode = String(runStream.currentNode || '').trim();
+  const currentNode = rawCurrentNode === 'idle' ? '' : rawCurrentNode;
   const status = String(runStream.status || 'idle');
   const sortedEvents = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
+  const seenNodes = new Set(sortedEvents.map((evt) => String(evt?.node || '').trim()).filter(Boolean));
 
   const nodes = useMemo(() => {
-    const completedNodeIds = new Set(sortedEvents?.map(e => e.node));
+    const completedNodeIds = new Set(seenNodes);
 
     return initialNodes.map(node => {
       const isActive = node.id === currentNode;
@@ -73,10 +81,10 @@ export default function AgentGraph({ runStream = {} }) {
         }
       };
     });
-  }, [currentNode, status, sortedEvents]);
+  }, [currentNode, status, seenNodes]);
 
   const edges = useMemo(() => {
-    const completedNodeIds = new Set(sortedEvents?.map(e => e.node));
+    const completedNodeIds = new Set(seenNodes);
 
     return initialEdges.map(edge => {
       const isActive = edge.source === currentNode || edge.target === currentNode;
@@ -102,7 +110,14 @@ export default function AgentGraph({ runStream = {} }) {
         }
       };
     });
-  }, [currentNode, sortedEvents]);
+  }, [currentNode, seenNodes]);
+
+  const teamOrder = ['planner', 'researcher', 'analyst', 'writer', 'critic'];
+  const teamProgress = teamOrder.map((nodeId) => {
+    if (currentNode === nodeId) return { id: nodeId, state: 'running' };
+    if (seenNodes.has(nodeId)) return { id: nodeId, state: 'done' };
+    return { id: nodeId, state: 'queued' };
+  });
 
   return (
     <div className="w-full h-full relative group">
@@ -110,18 +125,41 @@ export default function AgentGraph({ runStream = {} }) {
         <Network className="w-4 h-4" />
         Agent Graph
       </div>
+      <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-1 max-w-[60%]">
+        {teamProgress.map((item) => (
+          <span
+            key={item.id}
+            className={clsx(
+              'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest',
+              item.state === 'running' && 'border-secondary/60 bg-secondary/15 text-secondary',
+              item.state === 'done' && 'border-primary/60 bg-primary/15 text-primary',
+              item.state === 'queued' && 'border-white/20 bg-white/5 text-white/50'
+            )}
+          >
+            {item.id}
+          </span>
+        ))}
+      </div>
       <ReactFlow 
         nodes={nodes} 
         edges={edges} 
         fitView
+        fitViewOptions={{ padding: 0.25 }}
         nodesDraggable={false}
         nodesConnectable={false}
+        nodesFocusable={false}
+        elementsSelectable={false}
         zoomOnScroll={false}
         panOnDrag={false}
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#ffffff" gap={16} size={1} opacity={0.05} />
       </ReactFlow>
+      {status === 'idle' && (
+        <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[11px] text-white/70">
+          Launch a run to activate planner - researcher - analyst - writer - critic flow.
+        </div>
+      )}
     </div>
   );
 }

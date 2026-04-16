@@ -284,22 +284,33 @@ export function useRunStream({ resolveRunId, onFetchRecentRuns, isDeveloperMode 
   async function stopTargetRun(targetRunId = runId) {
     const resolvedRunId = resolveRunId(targetRunId);
     if (!resolvedRunId) {
-      setError('Select a run before requesting stop.');
+      const msg = 'Select a run before requesting stop.';
+      console.warn('[stopTargetRun]', msg);
+      setError(msg);
       return;
     }
 
+    console.log('[stopTargetRun] Stopping run:', resolvedRunId);
     setStoppingRunId(resolvedRunId);
     setError('');
     try {
-      await stopRun(resolvedRunId, { reason: 'Stopped from mission control UI.' });
+      console.log('[stopTargetRun] Calling API...');
+      const response = await stopRun(resolvedRunId, { reason: 'Stopped from mission control UI.' });
+      console.log('[stopTargetRun] Stop response:', response);
+      
       if (resolvedRunId === runId) {
+        console.log('[stopTargetRun] Reloading timeline and details...');
         await Promise.all([reloadTimeline(resolvedRunId), loadRunDetails(resolvedRunId)]);
       }
       if (onFetchRecentRuns) {
+        console.log('[stopTargetRun] Fetching recent runs...');
         await onFetchRecentRuns();
       }
+      console.log('[stopTargetRun] Stop completed successfully');
     } catch (err) {
-      setError(String(err.message || err));
+      const errorMsg = String(err.message || err);
+      console.error('[stopTargetRun] Error:', errorMsg, err);
+      setError(`Failed to stop run: ${errorMsg}`);
     } finally {
       setStoppingRunId('');
     }

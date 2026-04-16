@@ -1,0 +1,65 @@
+﻿........................................................................ [ 65%]
+......................................                                   [100%]
+============================== warnings summary ===============================
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\starlette\formparsers.py:12
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\pydantic\v1\typing.py:77: DeprecationWarning: ForwardRef._evaluate is a private API and is retained for compatibility, but will be removed in Python 3.16. Use ForwardRef.evaluate() or typing.evaluate_forward_ref() instead.
+    return cast(Any, type_)._evaluate(globalns, localns, type_params=(), recursive_guard=set())
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\langgraph\utils\runnable.py:249: 18 warnings
+tests/unit/test_graph_routes.py: 36 warnings
+tests/unit/test_orchestrator.py: 36 warnings
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\langgraph\utils\runnable.py:249: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    asyncio.iscoroutinefunction(func)
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\langgraph\utils\runnable.py:251: 18 warnings
+tests/unit/test_graph_routes.py: 36 warnings
+tests/unit/test_orchestrator.py: 36 warnings
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\langgraph\utils\runnable.py:251: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    and asyncio.iscoroutinefunction(func.__call__)
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\fastapi\routing.py:233: 22 warnings
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\fastapi\routing.py:233: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    is_coroutine = asyncio.iscoroutinefunction(dependant.call)
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\starlette\_utils.py:40: 26 warnings
+tests/integration/test_run_lifecycle.py: 4 warnings
+tests/test_api_integration.py: 48 warnings
+tests/test_rate_limiter.py: 2 warnings
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\starlette\_utils.py:40: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    return asyncio.iscoroutinefunction(obj) or (callable(obj) and asyncio.iscoroutinefunction(obj.__call__))
+
+app\main.py:68
+  H:\Projects\Nexus_Researcher\NEXUS_R_Main\backend\app\main.py:68: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\fastapi\applications.py:4495
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\fastapi\applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\_pytest\config\__init__.py:1441
+  C:\Users\Mehedi D Nafis\AppData\Roaming\Python\Python314\site-packages\_pytest\config\__init__.py:1441: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+110 passed, 293 warnings in 9.31s

@@ -2,7 +2,13 @@ import { useState, useCallback } from 'react';
 import { listRuns, getSystemMetrics } from '../lib/api';
 
 function isAuthError(err) {
-  return String(err?.message || err).includes('401');
+  const msg = String(err?.message || err).toLowerCase();
+  return msg.includes('401') && msg.includes('unauthorized');
+}
+
+function isForbiddenError(err) {
+  const msg = String(err?.message || err).toLowerCase();
+  return msg.includes('403') || msg.includes('forbidden');
 }
 
 export function useRuns(perPage = 12) {
@@ -15,6 +21,7 @@ export function useRuns(perPage = 12) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState('');
+  const [systemMetricsLoading, setSystemMetricsLoading] = useState(false);
 
   const [systemMetrics, setSystemMetrics] = useState({
     total_runs: 0,
@@ -49,6 +56,7 @@ export function useRuns(perPage = 12) {
   }, [runExplorerPage, searchText, statusFilter, dateFrom, dateTo, perPage]);
 
   const fetchSystemMetrics = useCallback(async () => {
+    setSystemMetricsLoading(true);
     try {
       const payload = await getSystemMetrics();
       setSystemMetrics({
@@ -62,8 +70,13 @@ export function useRuns(perPage = 12) {
       return { ok: true, payload };
     } catch (err) {
       const message = String(err.message || err);
+      // Metrics endpoint is optional - don't block auth flow on metrics errors
+      const authError = isAuthError(err);
+      const forbiddenRole = isForbiddenError(err);
       setError(message);
-      return { ok: false, authError: isAuthError(err), error: message };
+      return { ok: false, authError, forbiddenRole, error: message };
+    } finally {
+      setSystemMetricsLoading(false);
     }
   }, []);
 
@@ -110,6 +123,7 @@ export function useRuns(perPage = 12) {
     setDateTo,
     fetchRecentRuns,
     systemMetrics,
+    systemMetricsLoading,
     fetchSystemMetrics,
     resolveRunId,
     error,

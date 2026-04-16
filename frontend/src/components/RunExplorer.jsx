@@ -63,7 +63,10 @@ export default function RunExplorer({
               </button>
               {canStop && (
                 <button
-                  onClick={() => onStopRun(run.run_id)}
+                  onClick={() => {
+                    console.log('[RunExplorer] Stop button clicked for run:', run.run_id, run);
+                    onStopRun(run.run_id);
+                  }}
                   disabled={isStopping}
                   className="mt-2 w-full rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[11px] text-rose-100 disabled:opacity-50"
                 >

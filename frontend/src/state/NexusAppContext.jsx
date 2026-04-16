@@ -143,13 +143,10 @@ export function NexusAppProvider({ children }) {
     writeStorage(STORAGE_KEYS.authToken, token);
     setAuthTokenDraft(token);
 
-    const [runsResult, metricsResult] = await Promise.all([
-      runs.fetchRecentRuns(),
-      runs.fetchSystemMetrics(),
-    ]);
+    const runsResult = await runs.fetchRecentRuns();
+    const metricsResult = await runs.fetchSystemMetrics();
 
-    const authFailure = Boolean(runsResult?.authError || metricsResult?.authError);
-    if (authFailure) {
+    if (runsResult?.authError) {
       setAuthToken('');
       setAuthTokenState('');
       clearStorage(STORAGE_KEYS.authToken);
@@ -164,11 +161,28 @@ export function NexusAppProvider({ children }) {
       return { ok: false, authMode: jwtLike ? 'jwt' : 'opaque', reason: 'unauthorized' };
     }
 
+    // Metrics is optional - don't fail auth flow if metrics endpoint fails
+    const metricsWarning = metricsResult?.forbiddenRole
+      ? ' Metrics endpoint is restricted for this role.'
+      : '';
+
+    if (!runsResult?.ok) {
+      setAuthToken(token);
+      setAuthTokenState(token);
+      setAuthState({
+        status: 'ready',
+        message: `Bearer token accepted, but run history could not be restored.${metricsWarning}`,
+        claims,
+        tokenShape: jwtLike ? 'jwt' : 'opaque',
+      });
+      return { ok: true, authMode: jwtLike ? 'jwt' : 'opaque', reason: 'history_sync_failed' };
+    }
+
     setAuthToken(token);
     setAuthTokenState(token);
     setAuthState({
       status: 'ready',
-      message: jwtLike ? 'JWT accepted. History restored.' : 'Bearer token accepted. History restored.',
+      message: `${jwtLike ? 'JWT accepted. History restored.' : 'Bearer token accepted. History restored.'}${metricsWarning}`,
       claims,
       tokenShape: jwtLike ? 'jwt' : 'opaque',
     });
@@ -212,6 +226,8 @@ export function NexusAppProvider({ children }) {
     dateTo: runs.dateTo,
     setDateTo: runs.setDateTo,
     systemMetrics: runs.systemMetrics,
+    systemMetricsLoading: runs.systemMetricsLoading,
+    refreshSystemMetrics: runs.fetchSystemMetrics,
     resolveRunId: runs.resolveRunId,
     runsError: runs.error,
     runStream,
@@ -243,7 +259,9 @@ export function NexusAppProvider({ children }) {
     runs.setSearchText,
     runs.setStatusFilter,
     runs.statusFilter,
+    runs.systemMetricsLoading,
     runs.systemMetrics,
+    runs.fetchSystemMetrics,
     runStream,
     selectRun,
     selectedResultRunId,
@@ -273,6 +291,19 @@ export function NexusAppProvider({ children }) {
     restoreAttemptRef.current = preferredRunId;
     void selectRun(preferredRunId);
   }, [authState.status, runStream.runId, runs.recentRuns, selectRun]);
+
+  useEffect(() => {
+    if (authState.status !== 'ready') return;
+    void runs.fetchRecentRuns();
+  }, [
+    authState.status,
+    runs.fetchRecentRuns,
+    runs.runExplorerPage,
+    runs.searchText,
+    runs.statusFilter,
+    runs.dateFrom,
+    runs.dateTo,
+  ]);
 
   // Auto-navigate to the Results tab when a run finishes
   useEffect(() => {

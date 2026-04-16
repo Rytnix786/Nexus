@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Rocket, Plus, BrainCircuit, ScanSearch, TerminalSquare } from 'lucide-react';
+import { Rocket, Plus, BrainCircuit, ScanSearch, TerminalSquare, Zap, CheckCircle2, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import { uploadSources } from '../lib/api';
+import { useNexusApp } from '../state/NexusAppContext';
 
 function estimateTokenBurn({ objective, highImpact, uploadedContextChars }) {
   const text = String(objective || '').trim();
@@ -15,6 +16,8 @@ function estimateTokenBurn({ objective, highImpact, uploadedContextChars }) {
 }
 
 export default function MissionControl({ runStream = {}, authState = null, isDeveloperMode = false }) {
+  const { runStream: contextRunStream } = useNexusApp();
+  const effectiveRunStream = runStream || contextRunStream || {};
   const [objective, setObjective] = useState('');
   const [tokenBudget, setTokenBudget] = useState(isDeveloperMode ? 60000 : 9000);
   const [highImpact, setHighImpact] = useState(true);
@@ -23,6 +26,34 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
   const [uploadedContext, setUploadedContext] = useState('');
   const [uploadSummary, setUploadSummary] = useState('');
   const [uploading, setUploading] = useState(false);
+
+  const currentNode = effectiveRunStream?.currentNode || '';
+  const events = effectiveRunStream?.sortedEvents || [];
+
+  // Derive agent card states from timeline events
+  const agentCardStates = useMemo(() => {
+    const completedNodes = new Set(events.map(evt => evt.node).filter(Boolean));
+    return {
+      analyst: {
+        isActive: currentNode === 'analyst',
+        isComplete: completedNodes.has('analyst'),
+        label: 'Analytic Agent',
+        icon: BrainCircuit,
+      },
+      researcher: {
+        isActive: currentNode === 'researcher',
+        isComplete: completedNodes.has('researcher'),
+        label: 'Research Crawler',
+        icon: ScanSearch,
+      },
+      writer: {
+        isActive: currentNode === 'writer',
+        isComplete: completedNodes.has('writer'),
+        label: 'Synthesizer',
+        icon: TerminalSquare,
+      },
+    };
+  }, [currentNode, events]);
 
   const estimatedBurn = useMemo(() => {
     return estimateTokenBurn({
@@ -36,9 +67,9 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
 
   const handleLaunch = () => {
     if (!objective.trim()) return;
-    if (typeof runStream.startRun !== 'function') return;
+    if (typeof effectiveRunStream.startRun !== 'function') return;
     const effectiveBudget = isDeveloperMode ? Math.max(Number(tokenBudget || 0), recommendedBudget) : Number(tokenBudget || 0);
-    runStream.startRun({
+    effectiveRunStream.startRun({
       objective,
       highImpact,
       tokenBudget: effectiveBudget,
@@ -116,10 +147,10 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-4">
               <button 
                 onClick={handleLaunch}
-                disabled={runStream.loading || !objective.trim()}
+                disabled={effectiveRunStream.loading || !objective.trim()}
                 className="bg-gradient-to-r from-primary to-primary-dim px-8 py-4 rounded-full font-headline font-bold text-[#005762] hover:shadow-[0_0_25px_rgba(129,236,255,0.4)] cubic-bezier-transition flex items-center gap-2 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {runStream.loading ? 'Booting...' : 'Launch Run'}
+                {effectiveRunStream.loading ? 'Booting...' : 'Launch Run'}
                 <Rocket className="w-5 h-5 fill-current" />
               </button>
             </div>
@@ -208,39 +239,36 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
             </button>
           </div>
 
-          {runStream.error && <p className="mt-4 text-error">{runStream.error}</p>}
+          {effectiveRunStream.error && <p className="mt-4 text-error">{effectiveRunStream.error}</p>}
         </div>
       </div>
 
       {/* Agent Status Floating Cards (Bento style hint) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-12 system-boot" style={{ animationDelay: '0.5s' }}>
-        <div className="glass-panel border border-outline-variant/10 p-6 rounded-3xl flex items-center gap-4 lift-glow-hover cursor-pointer group">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary/20 transition-colors">
-            <BrainCircuit />
-          </div>
-          <div>
-            <div className="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-tighter">Analytic Agent</div>
-            <div className="text-sm font-body text-on-surface">Standing by</div>
-          </div>
-        </div>
-        <div className="glass-panel border border-outline-variant/10 p-6 rounded-3xl flex items-center gap-4 lift-glow-hover cursor-pointer group">
-          <div className="w-12 h-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary/20 transition-colors">
-             <ScanSearch />
-          </div>
-          <div>
-            <div className="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-tighter">Research Crawler</div>
-            <div className="text-sm font-body text-on-surface">Index ready</div>
-          </div>
-        </div>
-        <div className="glass-panel border border-outline-variant/10 p-6 rounded-3xl flex items-center gap-4 lift-glow-hover cursor-pointer group">
-          <div className="w-12 h-12 rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary group-hover:bg-tertiary/20 transition-colors">
-             <TerminalSquare />
-          </div>
-          <div>
-            <div className="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-tighter">Synthesizer</div>
-            <div className="text-sm font-body text-on-surface">Kernel idle</div>
-          </div>
-        </div>
+        {Object.entries(agentCardStates).map(([key, agent]) => {
+          const Icon = agent.icon;
+          return (
+            <div key={key} className="glass-panel border border-outline-variant/10 p-6 rounded-3xl flex items-center gap-4 lift-glow-hover cursor-pointer group">
+              <div className={clsx(
+                "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors",
+                agent.isActive ? 'bg-primary/20 text-primary animate-pulse' :
+                agent.isComplete ? 'bg-emerald-500/10 text-emerald-400' :
+                'bg-on-surface-variant/10 text-on-surface-variant'
+              )}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-tighter">{agent.label}</div>
+                <div className="text-sm font-body text-on-surface flex items-center gap-1">
+                  {agent.isActive && <Zap className="w-3.5 h-3.5 text-primary" />}
+                  {agent.isComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  {!agent.isActive && !agent.isComplete && <Clock className="w-3.5 h-3.5 text-on-surface-variant/50" />}
+                  {agent.isActive ? 'Running...' : agent.isComplete ? 'Complete' : 'Standby'}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
