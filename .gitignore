@@ -30,6 +30,11 @@ frontend/playwright-report/
 evals/.cache/
 evals/results.json
 
+# One-off reports
+EVALUATION.md
+HARDENING_PLAN_COMPLETION.md
+METRICS_401_FIX_REPORT.md
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
