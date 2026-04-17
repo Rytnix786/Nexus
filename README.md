@@ -459,4 +459,4 @@ MIT. Built as a portfolio project by Mehedi Hasan, BRAC University, Dhaka, Bangl
 
 ---
 
-[GitHub](https://github.com/<owner>/nexus-researcher) · [LinkedIn](https://linkedin.com/in/<your-linkedin>) · Built April 2026
+[GitHub](https://github.com/Rytnix786/Nexus) · [LinkedIn](https://www.linkedin.com/in/mehedi-hasan-rytnix786/) · Built April 2026
