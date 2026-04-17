@@ -354,8 +354,6 @@ Python version matrix: 3.11 (primary), 3.12 (secondary), 3.14 canary. Canary fai
 
 ## What I Learned Building This
 
-[YOUR REFLECTION HERE]
-
 The hardest part was not building any single component — it was making them compose correctly under failure. SSE resume semantics sound simple until you realize the client reconnects mid-stream and you have to decide what "resume" actually means when a node is still running on the server. I ended up modeling events with monotone sequence numbers, so reconnecting clients send `Last-Event-ID` and the server replays from a known point.
 
 Refusal gating was similarly subtle. The first version let the LLM decide when to refuse, which made refusal behavior unpredictable and untestable. Moving it to the graph level — as a deterministic node that activates when the Analyst's evidence falls below a measurable threshold — made it testable and tunable without touching prompts.
