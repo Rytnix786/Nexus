@@ -623,12 +623,18 @@ def stop_run(
             "message": "Run stopped",
         }
 
-    repository.request_stop(session, run_id, actor=auth.subject, reason=reason)
+    repository.request_stop(
+        session,
+        run_id,
+        actor=auth.subject,
+        reason=reason,
+        force_stopped=True,
+    )
     return {
         "run_id": run_id,
-        "status": status,
+        "status": "stopped",
         "stopped": True,
-        "message": "Stop requested",
+        "message": "Run stopped",
     }
 
 

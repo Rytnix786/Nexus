@@ -1,8 +1,14 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ResultsPanel from './ResultsPanel';
+
+const exportElementToPdfMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../lib/pdfExport', () => ({
+  exportElementToPdf: (...args) => exportElementToPdfMock(...args),
+}));
 
 vi.mock('../state/NexusAppContext', () => ({
   useNexusApp: () => ({ setCurrentTab: vi.fn() }),
@@ -27,5 +33,34 @@ describe('ResultsPanel', () => {
     expect(screen.getByText(/No completed runs yet/i)).toBeTruthy();
     expect(screen.getByText(/Start a run from the Orchestrator/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Start a Run/i })).toBeTruthy();
+  });
+
+  it('exports the selected report using the shared PDF exporter', async () => {
+    render(
+      <ResultsPanel
+        recentRuns={[]}
+        runStream={{
+          runId: 'run-1234567890ab',
+          status: 'completed',
+          runDetails: {
+            objective: 'Test objective',
+            final_output: '# Report\n\nThis is a generated report.',
+            status: 'completed',
+            started_at: '2026-04-18T12:00:00Z',
+            updated_at: '2026-04-18T12:05:00Z',
+          },
+        }}
+        selectedResultRunId="run-1234567890ab"
+        setSelectedResultRunId={vi.fn()}
+        onSelectRun={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Export PDF/i }));
+
+    await waitFor(() => {
+      expect(exportElementToPdfMock).toHaveBeenCalledTimes(1);
+      expect(exportElementToPdfMock).toHaveBeenCalledWith(expect.any(Object), 'run-1234567890ab', 'nexus-report');
+    });
   });
 });

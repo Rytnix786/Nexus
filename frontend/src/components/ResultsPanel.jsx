@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import clsx from 'clsx';
 import { getRunStatus, getRunTimeline } from '../lib/api';
+import { exportElementToPdf } from '../lib/pdfExport';
 import { prettyStatus, relativeTimeLabel, parseTimestamp, statusClass } from './shared';
 import { useNexusApp } from '../state/NexusAppContext';
 import RunMetrics from './RunMetrics';
@@ -62,34 +63,6 @@ async function shareOrCopyLink(runId, objective) {
   }
   const result = await copyToClipboard(url);
   return { ...result, method: 'clipboard-link' };
-}
-
-// ─── Async PDF export ─────────────────────────────────────────────────────────
-
-async function exportToPdf(contentRef, runId) {
-  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-    import('jspdf'),
-    import('html2canvas'),
-  ]);
-  const el = contentRef.current;
-  if (!el) throw new Error('Content not mounted');
-  const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#0c0e13', logging: false });
-  const imgData = canvas.toDataURL('image/png');
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const pw = pdf.internal.pageSize.getWidth();
-  const ph = pdf.internal.pageSize.getHeight();
-  const imgH = (canvas.height * pw) / canvas.width;
-  let left = imgH;
-  let y = 0;
-  pdf.addImage(imgData, 'PNG', 0, y, pw, imgH);
-  left -= ph;
-  while (left > 0) {
-    y -= ph;
-    pdf.addPage();
-    pdf.addImage(imgData, 'PNG', 0, y, pw, imgH);
-    left -= ph;
-  }
-  pdf.save(`nexus-report-${String(runId || 'export').slice(0, 12)}.pdf`);
 }
 
 // ─── Toast hook ───────────────────────────────────────────────────────────────
@@ -291,7 +264,7 @@ export default function ResultsPanel({
     if (exporting || !output) return;
     setExporting(true);
     try {
-      await exportToPdf(contentRef, selectedResultRunId);
+      await exportElementToPdf(contentRef, selectedResultRunId, 'nexus-report');
       showToast('PDF downloaded');
     } catch (err) {
       showToast(`PDF failed: ${String(err?.message || err).slice(0, 60)}`, 'error');

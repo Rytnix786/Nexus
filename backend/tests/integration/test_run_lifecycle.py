@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+
+from app.core.models import RunCreateRequest
+from app.core.orchestrator import Orchestrator
+from app.db import repository
+from app.db.session import get_session
+from app.main import app
 
 
 def _parse_sse(response_text: str) -> list[dict]:
@@ -89,3 +96,40 @@ def test_approval_resume_completes_run(client, monkeypatch):
     timeline = client.get(f"/api/runs/{run_id}/timeline")
     assert timeline.status_code == 200
     assert len(timeline.json()["events"]) > 0
+
+
+def test_stop_running_run_transitions_to_stopped_immediately(client):
+    orchestrator = Orchestrator()
+    state = orchestrator.build_initial_state(
+        RunCreateRequest(objective="Stop regression", high_impact=False, token_budget=5000)
+    )
+    state["run_id"] = "running-stop-regression"
+    state["status"] = "running"
+    state["current_node"] = "researcher"
+    state["updated_at"] = datetime.now(timezone.utc)
+
+    session_provider = app.dependency_overrides[get_session]
+    session_generator = session_provider()
+    session = next(session_generator)
+    try:
+        repository.create_run(session, state)
+    finally:
+        try:
+            next(session_generator)
+        except StopIteration:
+            pass
+
+    response = client.post(
+        f"/api/runs/{state['run_id']}/stop",
+        json={"reason": "Stop from integration regression test"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stopped"] is True
+    assert payload["status"] == "stopped"
+
+    status_response = client.get(f"/api/runs/{state['run_id']}")
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["status"] == "stopped"
+    assert status_payload["current_node"] == "finalize"

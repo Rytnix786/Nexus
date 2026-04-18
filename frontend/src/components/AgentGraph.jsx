@@ -1,205 +1,150 @@
-import React, { useMemo } from 'react';
-import { ReactFlow, MiniMap, Controls, Background, MarkerType } from '@xyflow/react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ReactFlow, Background, Controls, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import '../styles/AgentGraph.css';
 import clsx from 'clsx';
-import { Network } from 'lucide-react';
+import { useWorkflowLayout } from '../hooks/useWorkflowLayout';
+import { WorkflowNode } from './WorkflowNode';
+import {
+  deriveEdgeStatus,
+  deriveNodeStatuses,
+  deriveNodeTokenTotals,
+  getEdgeStyle,
+  getNodeStyle,
+} from '../utils/workflowGraph';
 
-const NODE_META = [
-  { id: 'planner', label: 'Planner', x: 110, y: 40 },
-  { id: 'researcher', label: 'Researcher', x: 110, y: 120 },
-  { id: 'analyst', label: 'Analyst', x: 110, y: 200 },
-  { id: 'writer', label: 'Writer', x: 110, y: 280 },
-  { id: 'critic', label: 'Critic', x: 260, y: 360 },
-  { id: 'human_approval', label: 'Human Approval', x: -40, y: 360 },
-  { id: 'refusal', label: 'Refusal Gate', x: 110, y: 360 },
-  { id: 'finalize', label: 'Finalize', x: 110, y: 460 },
-];
+function useContainerSize(ref) {
+  const [size, setSize] = useState({ width: 900, height: 680 });
+  const [measured, setMeasured] = useState(false);
 
-const initialNodes = NODE_META.map((item) => ({
-  id: item.id,
-  position: { x: item.x, y: item.y },
-  data: { label: item.label },
-}));
+  useEffect(() => {
+    const update = () => {
+      if (!ref.current) return;
+      const { clientWidth, clientHeight } = ref.current;
+      const nextWidth = Math.max(360, clientWidth || 900);
+      const nextHeight = Math.max(520, clientHeight || 680);
 
-const initialEdges = [
-  { id: 'e-p-r', source: 'planner', target: 'researcher' },
-  { id: 'e-r-a', source: 'researcher', target: 'analyst' },
-  { id: 'e-a-ref', source: 'analyst', target: 'refusal' },
-  { id: 'e-a-w', source: 'analyst', target: 'writer' },
-  { id: 'e-ref-f', source: 'refusal', target: 'finalize' },
-  { id: 'e-w-ha', source: 'writer', target: 'human_approval' },
-  { id: 'e-w-c', source: 'writer', target: 'critic' },
-  { id: 'e-ha-f', source: 'human_approval', target: 'finalize' },
-  { id: 'e-c-f', source: 'critic', target: 'finalize' },
-  { id: 'e-c-w', source: 'critic', target: 'writer', type: 'step', style: { strokeDasharray: '5,5' } },
-];
+      setSize({
+        width: nextWidth,
+        height: nextHeight,
+      });
+
+      if (clientWidth > 0 && clientHeight > 0) {
+        setMeasured(true);
+      }
+    };
+
+    update();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(update);
+      if (ref.current) observer.observe(ref.current);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [ref]);
+
+  return { size, measured };
+}
+
+function GraphViewportSync({ isMeasured, fitViewOptions }) {
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    if (!isMeasured) return;
+    fitView(fitViewOptions);
+  }, [fitView, fitViewOptions, isMeasured]);
+
+  return null;
+}
 
 export default function AgentGraph({ runStream = {} }) {
-  const rawCurrentNode = String(runStream.currentNode || '').trim();
-  const currentNode = rawCurrentNode === 'idle' ? '' : rawCurrentNode;
-  const status = String(runStream.status || 'idle');
+  const containerRef = useRef(null);
+  const { size, measured } = useContainerSize(containerRef);
   const sortedEvents = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
-  const seenNodes = new Set(sortedEvents.map((evt) => String(evt?.node || '').trim()).filter(Boolean));
+  const currentNode = String(runStream.currentNode || '').trim();
+  const status = String(runStream.status || '').trim().toLowerCase();
+  const fitViewOptions = useMemo(() => ({ padding: 0.18, minZoom: 0.76, maxZoom: 1.25 }), []);
 
-  const nodeTokenUsage = useMemo(() => {
-    const totals = {};
-    for (const evt of sortedEvents) {
-      const node = String(evt?.node || '').trim();
-      if (!node) continue;
-      const data = evt?.data || {};
-      const value = Number(
-        data.total_tokens ?? data.tokens_used ?? data.completion_tokens ?? 0
-      );
-      totals[node] = Number(totals[node] || 0) + (Number.isFinite(value) ? value : 0);
-    }
-    return totals;
-  }, [sortedEvents]);
+  const { nodes: layoutNodes, edges: layoutEdges } = useWorkflowLayout(size);
 
-  const nodeStatus = useMemo(() => {
-    const statuses = {};
-    const failedStatuses = new Set(['failed', 'stopped', 'rejected', 'timeout']);
-    for (const meta of NODE_META) {
-      statuses[meta.id] = 'pending';
-    }
-
-    for (const node of seenNodes) {
-      if (statuses[node] === 'pending') {
-        statuses[node] = 'completed';
-      }
-    }
-
+  const nodeTokenTotals = useMemo(() => deriveNodeTokenTotals(sortedEvents), [sortedEvents]);
+  const nodeStatuses = useMemo(() => {
+    const derived = deriveNodeStatuses(sortedEvents, status);
     if (currentNode) {
-      statuses[currentNode] = failedStatuses.has(status) ? 'failed' : 'running';
+      derived[currentNode] = new Set(['failed', 'error', 'timeout', 'stopped', 'rejected']).has(status)
+        ? 'failed'
+        : 'running';
     }
+    return derived;
+  }, [sortedEvents, status, currentNode]);
 
-    return statuses;
-  }, [currentNode, seenNodes, status]);
+  const nodes = useMemo(
+    () =>
+      layoutNodes.map((node) => {
+        const nodeStatus = nodeStatuses[node.id] || 'pending';
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            label: node.data?.label || node.id,
+            status: nodeStatus,
+            tokenCount: Number(nodeTokenTotals[node.id] || 0),
+          },
+          className: clsx('workflow-node-wrapper', `workflow-node-wrapper-${nodeStatus}`),
+          style: {
+            ...node.style,
+            ...getNodeStyle(nodeStatus),
+          },
+        };
+      }),
+    [layoutNodes, nodeStatuses, nodeTokenTotals]
+  );
 
-  const nodes = useMemo(() => {
-    return initialNodes.map(node => {
-      const state = nodeStatus[node.id] || 'pending';
-      const isActive = state === 'running';
-      const isDone = state === 'completed';
-      const isError = state === 'failed';
-      
-      let borderCol = '#46484e'; // outline-variant (waiting)
-      let bgCol = '#171a20'; // surface-container
-      let textCol = '#aaabb2'; // text-on-surface-variant
-      
-      if (isActive) {
-        borderCol = '#c180ff'; // secondary (running)
-        bgCol = '#0c0e13';
-        textCol = '#c180ff';
-      } else if (isDone) {
-        borderCol = '#00E5FF'; // primary (done)
-        textCol = '#00E5FF';
-      } else if (isError) {
-        borderCol = '#ff716c';
-        textCol = '#ff716c';
-      }
-      
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          name: String(node.data?.label || node.id),
-          status: state,
-          tokenUsage: Number(nodeTokenUsage[node.id] || 0),
-        },
-        className: isActive ? 'animate-pulse' : '',
-        style: {
-          background: bgCol,
-          color: textCol,
-          border: `1px solid ${borderCol}`,
-          borderRadius: '8px',
-          padding: '10px 15px',
-          fontSize: '12px',
-          fontWeight: isActive ? 700 : 500,
-          boxShadow: isActive ? '0 0 15px rgba(193, 128, 255, 0.4)' : (isDone ? '0 0 8px rgba(0, 229, 255, 0.1)' : 'none'),
-          opacity: isActive || isDone ? 1 : 0.5,
-          transition: 'all 0.3s ease'
-        }
-      };
-    });
-  }, [nodeStatus, nodeTokenUsage]);
-
-  const edges = useMemo(() => {
-    const completedNodeIds = new Set(seenNodes);
-
-    return initialEdges.map(edge => {
-      const isActive = edge.source === currentNode || edge.target === currentNode;
-      const isDone = completedNodeIds.has(edge.source) && completedNodeIds.has(edge.target);
-      
-      const edgeColor = isActive ? '#c180ff' : (isDone ? '#00E5FF' : '#46484e');
-      
-      return {
-        ...edge,
-        animated: isActive || edge.source === currentNode,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 15,
-          height: 15,
-          color: edgeColor,
-        },
-        style: {
-          stroke: edgeColor,
-          strokeWidth: isActive || isDone ? 2 : 1,
-          opacity: isActive || isDone ? 1 : 0.3,
-          transition: 'all 0.3s ease',
-          ...(edge.style || {})
-        }
-      };
-    });
-  }, [currentNode, seenNodes]);
-
-  const teamOrder = ['planner', 'researcher', 'analyst', 'writer', 'critic'];
-  const teamProgress = teamOrder.map((nodeId) => {
-    if (currentNode === nodeId) return { id: nodeId, state: 'running' };
-    if (seenNodes.has(nodeId)) return { id: nodeId, state: 'done' };
-    return { id: nodeId, state: 'queued' };
-  });
+  const edges = useMemo(
+    () =>
+      layoutEdges.map((edge) => {
+        const edgeStatus = deriveEdgeStatus(edge, nodeStatuses);
+        return {
+          ...edge,
+          animated: edgeStatus === 'running',
+          className: clsx('workflow-edge', `workflow-edge-${edgeStatus}`, {
+            'workflow-edge-loopback': edge.loopback,
+          }),
+          style: getEdgeStyle(edgeStatus, edge.loopback),
+        };
+      }),
+    [layoutEdges, nodeStatuses]
+  );
 
   return (
-    <div className="w-full h-full relative group">
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-2 text-xs font-label uppercase tracking-widest text-on-surface-variant">
-        <Network className="w-4 h-4" />
-        Agent Graph
+    <div ref={containerRef} className="agent-graph-shell w-full h-full relative overflow-hidden">
+      <div className="agent-graph-canvas absolute inset-0">
+        <ReactFlow
+          nodes={nodes}
+          nodeTypes={{ workflow: WorkflowNode }}
+          nodeOrigin={[0, 0]}
+          edges={edges}
+          defaultEdgeOptions={{ type: 'smoothstep' }}
+          colorMode="dark"
+          fitView
+          fitViewOptions={{ padding: 0.18, minZoom: 0.76, maxZoom: 1.25 }}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          nodesFocusable={false}
+          elementsSelectable={false}
+          zoomOnScroll={false}
+          panOnDrag={false}
+          panOnScroll={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          <GraphViewportSync isMeasured={measured} fitViewOptions={fitViewOptions} />
+          <Background color="rgba(137,145,161,0.55)" gap={16} size={1} opacity={0.14} />
+          <Controls showInteractive={false} position="bottom-left" />
+        </ReactFlow>
       </div>
-      <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-1 max-w-[60%]">
-        {teamProgress.map((item) => (
-          <span
-            key={item.id}
-            className={clsx(
-              'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest',
-              item.state === 'running' && 'border-secondary/60 bg-secondary/15 text-secondary',
-              item.state === 'done' && 'border-primary/60 bg-primary/15 text-primary',
-              item.state === 'queued' && 'border-white/20 bg-white/5 text-white/50'
-            )}
-          >
-            {item.id}
-          </span>
-        ))}
-      </div>
-      <ReactFlow 
-        nodes={nodes} 
-        edges={edges} 
-        fitView
-        fitViewOptions={{ padding: 0.25 }}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        nodesFocusable={false}
-        elementsSelectable={false}
-        zoomOnScroll={false}
-        panOnDrag={false}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background color="#ffffff" gap={16} size={1} opacity={0.05} />
-      </ReactFlow>
-      {status === 'idle' && (
-        <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[11px] text-white/70">
-          Launch a run to activate planner - researcher - analyst - writer - critic flow.
-        </div>
-      )}
     </div>
   );
 }

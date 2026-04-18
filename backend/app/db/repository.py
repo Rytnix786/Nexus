@@ -120,19 +120,34 @@ def get_run_record(session: Session, run_id: str) -> RunRecord | None:
     return session.get(RunRecord, run_id)
 
 
-def request_stop(session: Session, run_id: str, actor: str, reason: str) -> dict[str, Any]:
+def request_stop(
+    session: Session,
+    run_id: str,
+    actor: str,
+    reason: str,
+    *,
+    force_stopped: bool = False,
+) -> dict[str, Any]:
     record = session.get(RunRecord, run_id)
     if record is None:
         raise KeyError("Run not found")
 
+    now = datetime.now(timezone.utc)
     state = dict(record.state_json or {})
     state["stop_requested"] = True
     state["stop_requested_by"] = str(actor or "unknown")
     state["stop_reason"] = str(reason or "Stopped by operator")
-    state["stop_requested_at"] = datetime.now(timezone.utc).isoformat()
+    state["stop_requested_at"] = now.isoformat()
+
+    if force_stopped:
+        state["status"] = "stopped"
+        state["current_node"] = "finalize"
+        state["updated_at"] = now.isoformat()
+        record.status = "stopped"
+        record.current_node = "finalize"
 
     record.state_json = jsonable_encoder(state)
-    record.updated_at = datetime.now(timezone.utc)
+    record.updated_at = now
     session.commit()
     return state
 

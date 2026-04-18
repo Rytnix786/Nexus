@@ -2,48 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Download, Share2, Printer, CheckCircle2, Copy, Check, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-// ─── Async PDF export (html2canvas + jsPDF) ───────────────────────────────────
-async function exportToPdf(contentRef, runId) {
-  // Lazy-import so the heavy libraries don't affect initial bundle parse time.
-  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-    import('jspdf'),
-    import('html2canvas'),
-  ]);
-
-  const element = contentRef.current;
-  if (!element) throw new Error('Report content not found');
-
-  const canvas = await html2canvas(element, {
-    scale: 2,           // retina quality
-    useCORS: true,
-    backgroundColor: '#0c0e13',
-    logging: false,
-  });
-
-  const imgData = canvas.toDataURL('image/png');
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  let heightLeft = imgHeight;
-  let yPosition = 0;
-
-  pdf.addImage(imgData, 'PNG', 0, yPosition, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-
-  while (heightLeft > 0) {
-    yPosition -= pageHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, 'PNG', 0, yPosition, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-  }
-
-  pdf.save(`nexus-report-${String(runId || 'export').slice(0, 12)}.pdf`);
-}
+import { exportElementToPdf } from '../lib/pdfExport';
 
 // ─── Clipboard write with permission fallback ─────────────────────────────────
 async function copyToClipboard(text) {
@@ -156,7 +115,7 @@ export default function RunArtifact({ runStream = {} }) {
     if (exporting) return;
     setExporting(true);
     try {
-      await exportToPdf(contentRef, runId);
+      await exportElementToPdf(contentRef, runId, 'nexus-report');
       showToast('PDF downloaded');
     } catch (err) {
       showToast(`PDF failed: ${String(err?.message || err).slice(0, 60)}`, 'error');

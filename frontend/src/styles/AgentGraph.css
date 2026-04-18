@@ -1,0 +1,176 @@
+/* Agent Graph Shell */
+.agent-graph-shell {
+  background:
+    radial-gradient(circle at top, rgba(36, 49, 73, 0.45), transparent 38%),
+    radial-gradient(circle at bottom, rgba(32, 22, 58, 0.42), transparent 44%),
+    linear-gradient(180deg, #0b0d12 0%, #0e1118 100%);
+}
+
+.agent-graph-canvas {
+  overflow: hidden;
+}
+
+/* React Flow viewport polish */
+.agent-graph-shell .react-flow__viewport {
+  transition: transform 260ms ease;
+}
+
+.agent-graph-shell .react-flow__controls {
+  border-radius: 14px;
+  background: rgba(16, 18, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.34);
+}
+
+.agent-graph-shell .react-flow__controls button {
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.agent-graph-shell .react-flow__controls button:hover {
+  background: rgba(193, 128, 255, 0.12);
+}
+
+.agent-graph-shell .react-flow__background {
+  opacity: 0.75;
+}
+
+/* Workflow node */
+.workflow-node-wrapper {
+  width: 172px;
+  min-height: 48px;
+}
+
+.workflow-node {
+  position: relative;
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  transform-origin: center center;
+  transition:
+    box-shadow 240ms ease,
+    border-color 240ms ease,
+    opacity 240ms ease,
+    transform 240ms ease;
+}
+
+.workflow-node.selected {
+  transform: scale(1.02);
+}
+
+.workflow-node-inner {
+  position: relative;
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+.workflow-node-label {
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.workflow-node-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 240ms ease;
+  background: radial-gradient(circle at center, rgba(193, 128, 255, 0.28), transparent 72%);
+}
+
+.workflow-node-running .workflow-node-glow {
+  opacity: 1;
+  animation: violet-pulse 1.35s ease-in-out infinite;
+}
+
+.workflow-node-completed .workflow-node-glow {
+  opacity: 0.8;
+}
+
+.workflow-node-failed .workflow-node-glow {
+  opacity: 0.72;
+  background: radial-gradient(circle at center, rgba(255, 113, 108, 0.22), transparent 72%);
+}
+
+.workflow-handle {
+  width: 7px !important;
+  height: 7px !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  background: rgba(193, 128, 255, 0.85) !important;
+  opacity: 0.88 !important;
+}
+
+.workflow-node-pending .workflow-handle {
+  background: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Edges */
+.agent-graph-shell .workflow-edge path {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 0;
+  transition:
+    stroke 220ms ease,
+    stroke-width 220ms ease,
+    opacity 220ms ease,
+    filter 220ms ease;
+}
+
+.agent-graph-shell .workflow-edge-running path {
+  stroke-dasharray: 9 10;
+  animation: edge-flow 1.1s linear infinite;
+}
+
+.agent-graph-shell .workflow-edge-completed path {
+  stroke-dasharray: 0;
+}
+
+.agent-graph-shell .workflow-edge-loopback path {
+  stroke-dasharray: 6 6;
+  opacity: 0.88;
+}
+
+/* Motion */
+@keyframes violet-pulse {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.68;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.98);
+    opacity: 0.68;
+  }
+}
+
+@keyframes edge-flow {
+  from {
+    stroke-dashoffset: 34;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-node,
+  .workflow-node-glow,
+  .agent-graph-shell .react-flow__viewport,
+  .agent-graph-shell .workflow-edge path {
+    animation: none !important;
+    transition: none !important;
+  }
+}

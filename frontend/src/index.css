@@ -148,3 +148,13 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+.xy-flow.dark {
+  --xy-edge-label-background-color-default: #13151a;
+  --xy-edge-label-color-default: #9ca3af;
+  --xy-controls-button-background-color-default: #13151a;
+  --xy-controls-button-color-default: #9ca3af;
+  --xy-controls-button-border-color-default: #2a2d35;
+  --xy-handle-background-color-default: transparent;
+  --xy-handle-border-color-default: transparent;
+}
