@@ -22,7 +22,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](/)
 
-[**Live Demo**](#getting-started) · [**Architecture**](#architecture) · [**API Docs**](#api-surface) · [**Deploy in One Click**](#quick-deploy)
+[**Live Demo**](#getting-started) · [**Architecture**](#architecture) · [**API Docs**](#api-surface)
 
 </div>
 
