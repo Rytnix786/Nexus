@@ -33,6 +33,21 @@ function tokenPct(run) {
   return Math.min(100, Math.round((used / budget) * 100));
 }
 
+function hasRefusalLikeText(text) {
+  const normalized = String(text || '').toLowerCase();
+  if (!normalized.trim()) return false;
+  const refusalSignals = [
+    /insufficient_context/i,
+    /insufficient\s+evidence/i,
+    /not enough\s+information/i,
+    /cannot provide\s+a\s+reliable\s+answer/i,
+    /unable to answer/i,
+    /i\s+(can'?t|cannot)\s+(help|answer|comply)/i,
+    /refuse\w*/i,
+  ];
+  return refusalSignals.some((pattern) => pattern.test(normalized));
+}
+
 // ─── Clipboard with fallback ──────────────────────────────────────────────────
 
 async function copyToClipboard(text) {
@@ -235,6 +250,8 @@ export default function ResultsPanel({
   const objective = String(details?.objective || selectedRun?.objective || '');
   const duration = runDuration(details || selectedRun);
   const pct = tokenPct(details);
+  const selectedStatus = String(details?.status || selectedRun?.status || '').toLowerCase();
+  const completedRefusalWarning = selectedStatus === 'completed' && hasRefusalLikeText(details?.final_output || output);
 
   // ── Action handlers ────────────────────────────────────────────────────────
   const handleCopy = async () => {
@@ -483,6 +500,18 @@ export default function ResultsPanel({
                 <p className="text-amber-100/70 text-xs mt-1">
                   The Analyst determined the retrieved sources were below the quality threshold.
                   The system returned <code className="font-mono">INSUFFICIENT_CONTEXT</code> instead of generating a hallucinated answer.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!loadingDetails && !detailsError && completedRefusalWarning && (
+            <div className="mb-6 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-200 text-sm">Completed with degraded output warning</p>
+                <p className="text-amber-100/70 text-xs mt-1">
+                  This completed run contains refusal-like language in the generated output. Treat the report as degraded and verify critical claims before acting on it.
                 </p>
               </div>
             </div>

@@ -160,7 +160,7 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
           <div className="mt-4 flex gap-4 text-sm text-on-surface-variant flex-wrap items-center">
              <label className="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/20 hover:border-outline-variant/50 cursor-pointer transition-colors">
                <input type="checkbox" checked={highImpact} onChange={(e) => setHighImpact(e.target.checked)} className="accent-primary" />
-               High Impact Graph Mode
+               Human Approval
              </label>
              <label className="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/20 hover:border-outline-variant/50 cursor-pointer transition-colors">
                <span>Token Budget:</span>
@@ -171,6 +171,12 @@ export default function MissionControl({ runStream = {}, authState = null, isDev
              </span>
              {isDeveloperMode && <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-emerald-300">Developer mode budget protection enabled</span>}
           </div>
+
+          <p className="mt-2 text-xs text-on-surface-variant">
+            {highImpact
+              ? 'Human approval checkpoint is required before critique.'
+              : 'Run proceeds without a human approval checkpoint.'}
+          </p>
 
           {budgetTooLow && (
             <div className="mt-3 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-200 flex items-center justify-between gap-4">
