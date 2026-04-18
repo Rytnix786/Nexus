@@ -36,6 +36,10 @@ function AppShell() {
     setDateFrom,
     dateTo,
     setDateTo,
+    minCostUsd,
+    setMinCostUsd,
+    maxCostUsd,
+    setMaxCostUsd,
     systemMetrics,
     systemMetricsLoading,
     refreshSystemMetrics,
@@ -91,7 +95,7 @@ function AppShell() {
         )}
 
         {currentTab === 'dashboard' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="mission-control" fallbackTitle="Mission Control failed to render safely.">
             <MissionControl
               runStream={shellRunStream}
               authState={authState}
@@ -101,7 +105,7 @@ function AppShell() {
         )}
 
         {currentTab === 'active' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="trace-timeline" fallbackTitle="Active run timeline failed to render safely.">
             <div className="flex-1 min-h-0 overflow-hidden w-full">
               <TraceTimeline runStream={shellRunStream} />
             </div>
@@ -110,7 +114,7 @@ function AppShell() {
 
         {currentTab === 'history' && (
           <div className="p-8 h-full overflow-y-auto custom-scrollbar relative z-10 w-full max-w-7xl mx-auto">
-            <ErrorBoundary>
+            <ErrorBoundary panel="run-explorer" fallbackTitle="Run Explorer failed to render safely.">
               <RunExplorer
                 searchText={searchText}
                 setSearchText={setSearchText}
@@ -120,6 +124,10 @@ function AppShell() {
                 setDateFrom={setDateFrom}
                 dateTo={dateTo}
                 setDateTo={setDateTo}
+                minCostUsd={minCostUsd}
+                setMinCostUsd={setMinCostUsd}
+                maxCostUsd={maxCostUsd}
+                setMaxCostUsd={setMaxCostUsd}
                 recentRuns={recentRuns}
                 runId={runStream.runId}
                 onSelectRun={selectRun}
@@ -129,13 +137,14 @@ function AppShell() {
                 perPage={12}
                 onStopRun={runStream.stopTargetRun}
                 stoppingRunId={runStream.stoppingRunId}
+                  onResumeWithBudget={runStream.resumeWithBudgetTopUp}
               />
             </ErrorBoundary>
           </div>
         )}
 
         {currentTab === 'results' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="results" fallbackTitle="Results panel failed to render safely.">
             <ResultsPanel
               recentRuns={recentRuns}
               runStream={runStream}
@@ -146,18 +155,18 @@ function AppShell() {
           </ErrorBoundary>
         )}
         {currentTab === 'agents' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="agent-pool" fallbackTitle="Agent Pool failed to render safely.">
             <AgentPool />
           </ErrorBoundary>
         )}
         {currentTab === 'settings' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="settings" fallbackTitle="Settings failed to render safely.">
             <SettingsPanel />
           </ErrorBoundary>
         )}
         {currentTab === 'status' && (
           <div className="p-8 h-full overflow-y-auto custom-scrollbar relative z-10 w-full max-w-7xl mx-auto">
-            <ErrorBoundary>
+            <ErrorBoundary panel="system-metrics" fallbackTitle="System Metrics failed to render safely.">
               <SystemMetricsPanel
                 metrics={systemMetrics}
                 loading={systemMetricsLoading}
@@ -168,12 +177,12 @@ function AppShell() {
           </div>
         )}
         {currentTab === 'models' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="models" fallbackTitle="Models panel failed to render safely.">
             <ModelsPanel />
           </ErrorBoundary>
         )}
         {currentTab === 'library' && (
-          <ErrorBoundary>
+          <ErrorBoundary panel="library" fallbackTitle="Library panel failed to render safely.">
             <LibraryPanel />
           </ErrorBoundary>
         )}

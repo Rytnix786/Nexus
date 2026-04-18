@@ -62,6 +62,9 @@ class _FakeOllamaResponse:
 
 
 class _FakeOllamaClient:
+    provider = "ollama"
+    model = "nexus-model"
+
     def __enter__(self):
         return self
 
@@ -94,12 +97,49 @@ class _FakeOllamaClient:
             text = "Generated response."
         return _FakeOllamaResponse(text)
 
+    def generate(self, prompt: str, *, max_tokens: int):
+        from app.core.llm import LLMGenerationResult
+
+        prompt_text = str(prompt).lower()
+        if "research plan" in prompt_text or "break the objective into 3-5 concrete research steps" in prompt_text:
+            text = "1. Scope the objective.\n2. Gather evidence.\n3. Synthesize recommendations."
+        elif "research agent" in prompt_text:
+            text = (
+                "- Key evidence collected from multiple reliable sources with detailed analysis.\n"
+                "- Relevant patterns observed across the data showing consistent trends.\n"
+                "- Follow-up questions noted for deeper investigation in future phases.\n"
+                "- Additional findings indicate strong alignment with best practices.\n"
+                "- Supporting documentation provides comprehensive references."
+            )
+        elif "you are an analyst" in prompt_text:
+            text = "The research is consistent and points to a clear implementation path."
+        elif "you are a report writer" in prompt_text:
+            text = (
+                "Summary:\nThe objective can be completed with a phased rollout.\n\n"
+                "Key Findings:\n- The plan is actionable.\n- The risks are manageable.\n\n"
+                "Recommendations:\n- Proceed in stages.\n- Validate each milestone."
+            )
+        elif "critical reviewer" in prompt_text:
+            text = "APPROVED: The draft is accurate, complete, and clear."
+        else:
+            text = "Generated response."
+        completion_tokens = max(1, len(text) // 4)
+        return LLMGenerationResult(
+            text=text,
+            prompt_tokens=0,
+            completion_tokens=completion_tokens,
+            total_tokens=completion_tokens,
+            metering_mode="provider_exact",
+            provider=self.provider,
+            model=self.model,
+        )
+
 
 @pytest.fixture(autouse=True)
 def fake_ollama_client(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(nodes.httpx, "Client", _FakeOllamaClient)
-    monkeypatch.setattr(nodes.settings, "ollama_base_url", "http://ollama.local")
-    monkeypatch.setattr(nodes.settings, "ollama_model", "nexus-model")
+    monkeypatch.setattr(nodes, "get_llm_client", lambda: _FakeOllamaClient())
+    monkeypatch.setattr(nodes.settings, "llm_provider", "ollama")
+    monkeypatch.setattr(nodes.settings, "llm_model", "nexus-model")
     yield
 
 

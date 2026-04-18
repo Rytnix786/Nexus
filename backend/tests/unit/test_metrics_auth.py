@@ -29,6 +29,9 @@ def test_metrics_accessible_without_auth(auth_enabled_client):
     assert response.status_code == 200, "Metrics should be accessible without auth"
     data = response.json()
     assert "total_runs" in data, "Should return metrics data"
+    assert "total_cost_usd" in data, "Should include total cost"
+    assert "avg_cost_per_run_usd" in data, "Should include average completed-run cost"
+    assert "cost_by_provider" in data, "Should include provider cost breakdown"
 
 
 def test_metrics_with_invalid_jwt(auth_enabled_client):

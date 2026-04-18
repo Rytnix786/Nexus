@@ -5,11 +5,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
-import httpx
-
 from app.agents.tools import bm25_search, rerank, web_search
 from app.core.cache import get_cached_response, save_response_to_cache
 from app.core.logging import get_logger
+from app.core.llm import LLMGenerationResult, ConfigurationError, get_llm_client
 from app.core.settings import settings
 from app.core.state import AgentState
 from app.core.tracing import safe_trace_span
@@ -218,10 +217,12 @@ def _guard_state(state: AgentState, node: str) -> dict[str, Any] | None:
     return None
 
 
-def _httpx_error_result(state: AgentState, node: str, exc: Exception) -> dict[str, Any]:
+def _llm_error_result(state: AgentState, node: str, exc: Exception) -> dict[str, Any]:
+    provider = str(getattr(settings, "llm_provider", "ollama") or "ollama")
+    model = str(getattr(settings, "llm_model", "") or "")
     logger.error(
-        "Ollama request failed",
-        extra={"node": node, "run_id": state.get("run_id", ""), "error": str(exc)},
+        "LLM request failed",
+        extra={"node": node, "run_id": state.get("run_id", ""), "error": str(exc), "provider": provider},
     )
     return {
         "status": "failed",
@@ -231,15 +232,15 @@ def _httpx_error_result(state: AgentState, node: str, exc: Exception) -> dict[st
             state,
             node,
             "node_error",
-            "Ollama request failed",
-            {"error": str(exc), "model": settings.ollama_model},
+            "LLM request failed",
+            {"error": str(exc), "provider": provider, "model": model},
         ),
     }
 
 
-def _ollama_generate(state: AgentState, node: str, prompt: str) -> tuple[str, int, int, dict[str, Any]] | dict[str, Any]:
+def _generate_llm_response(state: AgentState, node: str, prompt: str) -> LLMGenerationResult | dict[str, Any]:
     with safe_trace_span(
-        "node.ollama_generate",
+        "node.llm_generate",
         {
             "run_id": str(state.get("run_id", "")),
             "node": node,
@@ -247,50 +248,29 @@ def _ollama_generate(state: AgentState, node: str, prompt: str) -> tuple[str, in
         },
     ):
         try:
-            base_url = settings.ollama_base_url.rstrip("/")
-            response_url = f"{base_url}/api/generate"
-            payload = {
-                "model": settings.ollama_model,
-                "prompt": prompt,
-                "stream": False,
-                "keep_alive": settings.ollama_keep_alive,
-                "options": {
-                    "num_predict": _target_num_predict(state, node),
-                },
-            }
-            with httpx.Client() as client:
-                response = client.post(
-                    response_url,
-                    json=payload,
-                    timeout=max(10.0, float(settings.ollama_timeout_seconds)),
-                )
-                response.raise_for_status()
-                body = response.json()
-        except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
-            return _httpx_error_result(state, node, exc)
+            client = get_llm_client()
+            return client.generate(prompt, max_tokens=_target_num_predict(state, node))
+        except ConfigurationError as exc:
+            return _llm_error_result(state, node, exc)
+        except Exception as exc:
+            return _llm_error_result(state, node, exc)
 
-    if isinstance(body, dict):
-        response_text = str(body.get("response", "")).strip()
-    else:
-        response_text = str(body).strip()
 
-    if not response_text:
-        response_text = response.text.strip()
-
-    prompt_tokens = int(body.get("prompt_eval_count", 0)) if isinstance(body, dict) else 0
-    completion_tokens = int(body.get("eval_count", 0)) if isinstance(body, dict) else 0
-    exact_total = prompt_tokens + completion_tokens
-    estimated_token_cost = max(1, len(response_text) // 4)
-    is_exact = exact_total > 0
-    charged_tokens = min(state["token_budget_remaining"], exact_total if is_exact else estimated_token_cost)
+def _charge_tokens(state: AgentState, result: LLMGenerationResult) -> tuple[int, int]:
+    charged_tokens = min(state["token_budget_remaining"], result.total_tokens)
     remaining_budget = max(0, state["token_budget_remaining"] - charged_tokens)
-    usage = {
-        "prompt_tokens": prompt_tokens if is_exact else 0,
-        "completion_tokens": completion_tokens if is_exact else charged_tokens,
+    return charged_tokens, remaining_budget
+
+
+def _usage_data(result: LLMGenerationResult, charged_tokens: int) -> dict[str, Any]:
+    return {
+        "provider": result.provider,
+        "model": result.model,
+        "prompt_tokens": result.prompt_tokens,
+        "completion_tokens": result.completion_tokens,
         "total_tokens": charged_tokens,
-        "metering_mode": "provider_exact" if is_exact else "estimated",
+        "metering_mode": result.metering_mode,
     }
-    return response_text, charged_tokens, remaining_budget, usage
 
 
 def _success_response(
@@ -374,12 +354,13 @@ def planner_node(state: AgentState) -> dict[str, Any]:
         f"Objective: {state['objective']}"
         f"{_uploaded_context_block(state, 1400)}"
     )
-    llm_result = _ollama_generate(state, "planner", prompt)
+    llm_result = _generate_llm_response(state, "planner", prompt)
     if isinstance(llm_result, dict):
         logger.info("Node exit", extra={"node": "planner", "tokens_used": 0, "status": llm_result["status"]})
         return llm_result
 
-    plan, tokens_used, remaining_budget, usage = llm_result
+    tokens_used, remaining_budget = _charge_tokens(state, llm_result)
+    plan = llm_result.text
     compact_plan = _trim_context(plan)
     
     # Save to cache
@@ -394,10 +375,7 @@ def planner_node(state: AgentState) -> dict[str, Any]:
             "tokens_used": tokens_used,
             "objective": state["objective"],
             "plan_length": len(compact_plan),
-            "prompt_tokens": usage["prompt_tokens"],
-            "completion_tokens": usage["completion_tokens"],
-            "total_tokens": usage["total_tokens"],
-            "metering_mode": usage["metering_mode"],
+            **_usage_data(llm_result, tokens_used),
             "cache_hit": False,
         },
         plan=compact_plan,
@@ -460,12 +438,13 @@ def researcher_node(state: AgentState) -> dict[str, Any]:
         f"{_uploaded_context_block(state, 2800)}"
     )
 
-    llm_result = _ollama_generate(state, "researcher", prompt)
+    llm_result = _generate_llm_response(state, "researcher", prompt)
     if isinstance(llm_result, dict):
         logger.info("Node exit", extra={"node": "researcher", "tokens_used": 0, "status": llm_result["status"]})
         return llm_result
 
-    findings, tokens_used, remaining_budget, usage = llm_result
+    tokens_used, remaining_budget = _charge_tokens(state, llm_result)
+    findings = llm_result.text
     iteration_count = state["iteration_count"] + 1
     next_node = "analyst" if iteration_count >= state["max_iterations"] else "researcher"
 
@@ -483,10 +462,7 @@ def researcher_node(state: AgentState) -> dict[str, Any]:
             "results_found": len(tavily_results),
             "retrieved_context": retrieved_context,
             "web_search_used": bool(search_result.get("web_search_used")),
-            "prompt_tokens": usage["prompt_tokens"],
-            "completion_tokens": usage["completion_tokens"],
-            "total_tokens": usage["total_tokens"],
-            "metering_mode": usage["metering_mode"],
+            **_usage_data(llm_result, tokens_used),
         },
         research_notes=[*state["research_notes"], findings],
         iteration_count=iteration_count,
@@ -563,12 +539,13 @@ def analyst_node(state: AgentState) -> dict[str, Any]:
             f"Research notes:\n{_trim_context(chr(10).join(state['research_notes']), 1200)}"
             f"{_uploaded_context_block(state, 2400)}"
         )
-        llm_result = _ollama_generate(state, "analyst", prompt)
+        llm_result = _generate_llm_response(state, "analyst", prompt)
         if isinstance(llm_result, dict):
             logger.info("Node exit", extra={"node": "analyst", "tokens_used": 0, "status": llm_result["status"]})
             return llm_result
 
-        analysis, tokens_used, remaining_budget, usage = llm_result
+        tokens_used, remaining_budget = _charge_tokens(state, llm_result)
+        analysis = llm_result.text
         cache_hit = False
         
         # Save to cache (only if context is sufficient)
@@ -579,14 +556,11 @@ def analyst_node(state: AgentState) -> dict[str, Any]:
     
     # Use cached usage stats or actual ones
     if not cache_hit:
-        usage = {
-            "prompt_tokens": usage["prompt_tokens"],
-            "completion_tokens": usage["completion_tokens"],
-            "total_tokens": usage["total_tokens"],
-            "metering_mode": usage["metering_mode"],
-        }
+        usage = _usage_data(llm_result, tokens_used)
     else:
         usage = {
+            "provider": str(getattr(settings, "llm_provider", "ollama") or "ollama"),
+            "model": str(getattr(settings, "llm_model", "") or ""),
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
@@ -669,7 +643,14 @@ def writer_node(state: AgentState) -> dict[str, Any]:
         remaining_budget = state["token_budget_remaining"]
         cache_hit = True
         completed_sections = False  # Cached response, so no continuation was needed
-        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "metering_mode": "cached"}
+        usage = {
+            "provider": str(getattr(settings, "llm_provider", "ollama") or "ollama"),
+            "model": str(getattr(settings, "llm_model", "") or ""),
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "metering_mode": "cached",
+        }
         logger.info("Using cached writer response", extra={"run_id": state.get("run_id", ""), "draft_length": len(draft)})
     else:
         prompt = (
@@ -684,12 +665,13 @@ def writer_node(state: AgentState) -> dict[str, Any]:
             f"Analysis:\n{_trim_context(state['analysis'], 1200)}"
             f"{_uploaded_context_block(state, 2800)}"
         )
-        llm_result = _ollama_generate(state, "writer", prompt)
+        llm_result = _generate_llm_response(state, "writer", prompt)
         if isinstance(llm_result, dict):
             logger.info("Node exit", extra={"node": "writer", "tokens_used": 0, "status": llm_result["status"]})
             return llm_result
 
-        draft, tokens_used, remaining_budget, usage = llm_result
+        tokens_used, remaining_budget = _charge_tokens(state, llm_result)
+        draft = llm_result.text
         cache_hit = False
         
         completed_sections = False
@@ -700,7 +682,7 @@ def writer_node(state: AgentState) -> dict[str, Any]:
                 "Next-Step Execution Plan. Do not repeat already-complete sections.\n\n"
                 f"Current draft:\n{_trim_context(draft, 2600)}"
             )
-            continuation_result = _ollama_generate(
+            continuation_result = _generate_llm_response(
                 {
                     **state,
                     "token_budget_remaining": remaining_budget,
@@ -709,13 +691,18 @@ def writer_node(state: AgentState) -> dict[str, Any]:
                 continuation_prompt,
             )
             if not isinstance(continuation_result, dict):
-                continuation_text, more_tokens, remaining_budget, _more_usage = continuation_result
+                more_tokens, remaining_budget = _charge_tokens(
+                    {**state, "token_budget_remaining": remaining_budget},
+                    continuation_result,
+                )
                 tokens_used += more_tokens
+                continuation_text = continuation_result.text
                 continuation_clean = continuation_text.strip()
                 existing_clean = draft.strip()
                 if continuation_clean and continuation_clean.lower() != existing_clean.lower():
                     draft = f"{draft.rstrip()}\n\n{continuation_clean}"
                     completed_sections = True
+        usage = _usage_data(llm_result, tokens_used)
         
         # Save to cache
         save_response_to_cache(state["objective"], cache_context, draft)
@@ -730,10 +717,7 @@ def writer_node(state: AgentState) -> dict[str, Any]:
             "tokens_used": tokens_used,
             "draft_length": len(draft),
             "next_node": next_node,
-            "prompt_tokens": usage["prompt_tokens"],
-            "completion_tokens": usage["completion_tokens"],
-            "total_tokens": usage["total_tokens"],
-            "metering_mode": usage["metering_mode"],
+            **usage,
             "completed_sections": completed_sections,
             "cache_hit": cache_hit,
         },
@@ -826,7 +810,14 @@ def critic_node(state: AgentState) -> dict[str, Any]:
         tokens_used = 0
         remaining_budget = state["token_budget_remaining"]
         cache_hit = True
-        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "metering_mode": "cached"}
+        usage = {
+            "provider": str(getattr(settings, "llm_provider", "ollama") or "ollama"),
+            "model": str(getattr(settings, "llm_model", "") or ""),
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "metering_mode": "cached",
+        }
         logger.info("Using cached critic response", extra={"run_id": state.get("run_id", ""), "critique_length": len(critique)})
     else:
         prompt = (
@@ -837,16 +828,18 @@ def critic_node(state: AgentState) -> dict[str, Any]:
             f"Analysis:\n{state['analysis']}\n\n"
             f"Draft:\n{state['draft']}"
         )
-        llm_result = _ollama_generate(state, "critic", prompt)
+        llm_result = _generate_llm_response(state, "critic", prompt)
         if isinstance(llm_result, dict):
             logger.info("Node exit", extra={"node": "critic", "tokens_used": 0, "status": llm_result["status"]})
             return llm_result
 
-        critique, tokens_used, remaining_budget, usage = llm_result
+        tokens_used, remaining_budget = _charge_tokens(state, llm_result)
+        critique = llm_result.text
         cache_hit = False
         
         # Save to cache
         save_response_to_cache(state["objective"], cache_context, critique)
+        usage = _usage_data(llm_result, tokens_used)
     
     approved = critique.startswith("APPROVED")
     complete_draft = _draft_is_complete(str(state.get("draft", "") or ""))
@@ -874,10 +867,7 @@ def critic_node(state: AgentState) -> dict[str, Any]:
             "approved": approved,
             "complete_draft": complete_draft,
             "next_node": next_node,
-            "prompt_tokens": usage["prompt_tokens"],
-            "completion_tokens": usage["completion_tokens"],
-            "total_tokens": usage["total_tokens"],
-            "metering_mode": usage["metering_mode"],
+            **usage,
             "cache_hit": cache_hit,
         },
         critique=critique,

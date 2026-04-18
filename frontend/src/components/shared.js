@@ -95,3 +95,11 @@ export function safePct(used, total) {
   if (!total || total <= 0) return null;
   return Math.max(0, Math.min(100, (used / total) * 100));
 }
+
+export function formatDollars(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 'Local (free)';
+  }
+  return `$${numeric.toFixed(4)}`;
+}

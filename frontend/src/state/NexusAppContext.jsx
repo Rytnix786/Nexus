@@ -225,6 +225,10 @@ export function NexusAppProvider({ children }) {
     setDateFrom: runs.setDateFrom,
     dateTo: runs.dateTo,
     setDateTo: runs.setDateTo,
+    minCostUsd: runs.minCostUsd,
+    setMinCostUsd: runs.setMinCostUsd,
+    maxCostUsd: runs.maxCostUsd,
+    setMaxCostUsd: runs.setMaxCostUsd,
     systemMetrics: runs.systemMetrics,
     systemMetricsLoading: runs.systemMetricsLoading,
     refreshSystemMetrics: runs.fetchSystemMetrics,
@@ -255,9 +259,13 @@ export function NexusAppProvider({ children }) {
     runs.searchText,
     runs.setDateFrom,
     runs.setDateTo,
+    runs.setMinCostUsd,
+    runs.setMaxCostUsd,
     runs.setRunExplorerPage,
     runs.setSearchText,
     runs.setStatusFilter,
+    runs.minCostUsd,
+    runs.maxCostUsd,
     runs.statusFilter,
     runs.systemMetricsLoading,
     runs.systemMetrics,
@@ -303,6 +311,8 @@ export function NexusAppProvider({ children }) {
     runs.statusFilter,
     runs.dateFrom,
     runs.dateTo,
+    runs.minCostUsd,
+    runs.maxCostUsd,
   ]);
 
   // Auto-navigate to the Results tab when a run finishes

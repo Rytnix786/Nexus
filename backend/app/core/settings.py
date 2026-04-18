@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import Field
+from typing import Literal
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,9 +14,12 @@ class Settings(BaseSettings):
     api_prefix: str = Field(default="/api")
     cors_allowed_origins: str = Field(default="http://localhost:5173,http://127.0.0.1:5173")
 
+    llm_provider: Literal["ollama", "openai", "anthropic"] = Field(default="ollama")
+    llm_model: str = Field(default="llama3.2:1b", validation_alias=AliasChoices("LLM_MODEL", "OLLAMA_MODEL"))
+    openai_api_key: str = Field(default="")
+    anthropic_api_key: str = Field(default="")
+
     ollama_base_url: str = Field(default="http://ollama:11434")
-    # Keep in sync with OLLAMA_MODEL in docker-compose.yml
-    ollama_model: str = Field(default="llama3.2:1b")
     ollama_timeout_seconds: float = Field(default=120.0)
     ollama_num_predict: int = Field(default=220)
     ollama_keep_alive: str = Field(default="20m")
@@ -74,6 +79,10 @@ class Settings(BaseSettings):
     jwt_issuer: str = Field(default="")
     jwt_audience: str = Field(default="")
     idempotency_ttl_minutes: int = Field(default=120)
+
+    @property
+    def ollama_model(self) -> str:
+        return self.llm_model
 
 
 settings = Settings()

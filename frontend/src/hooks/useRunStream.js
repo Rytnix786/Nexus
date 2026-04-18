@@ -204,7 +204,7 @@ export function useRunStream({ resolveRunId, onFetchRecentRuns, isDeveloperMode 
     }
   }
 
-  async function submitDecision(decision, reviewerNotes) {
+  async function submitDecision(decision, reviewerNotes, reason = '') {
     const activeRunId = resolveRunId(runId) || resolveRunId(runIdRef.current) || runIdRef.current || runId;
     if (!activeRunId) {
       setError('Active run context is missing. Reload timeline and try again.');
@@ -231,6 +231,7 @@ export function useRunStream({ resolveRunId, onFetchRecentRuns, isDeveloperMode 
               decision,
               reviewer: 'human_operator',
               notes: note,
+              reason: String(reason || '').trim() || undefined,
             },
             handleEvent,
             { lastEventId: lastSeqRef.current || undefined, signal, idempotencyKey }
@@ -290,23 +291,17 @@ export function useRunStream({ resolveRunId, onFetchRecentRuns, isDeveloperMode 
       return;
     }
 
-    console.log('[stopTargetRun] Stopping run:', resolvedRunId);
     setStoppingRunId(resolvedRunId);
     setError('');
     try {
-      console.log('[stopTargetRun] Calling API...');
       const response = await stopRun(resolvedRunId, { reason: 'Stopped from mission control UI.' });
-      console.log('[stopTargetRun] Stop response:', response);
       
       if (resolvedRunId === runId) {
-        console.log('[stopTargetRun] Reloading timeline and details...');
         await Promise.all([reloadTimeline(resolvedRunId), loadRunDetails(resolvedRunId)]);
       }
       if (onFetchRecentRuns) {
-        console.log('[stopTargetRun] Fetching recent runs...');
         await onFetchRecentRuns();
       }
-      console.log('[stopTargetRun] Stop completed successfully');
     } catch (err) {
       const errorMsg = String(err.message || err);
       console.error('[stopTargetRun] Error:', errorMsg, err);

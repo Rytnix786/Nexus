@@ -12,6 +12,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DatabaseError, OperationalError
 
 from app.api.routes import router
+from app.core.llm import get_llm_client
 from app.core.logging import configure_logging, get_logger, request_id_var
 from app.core.settings import settings
 from app.db.repository import init_db
@@ -72,6 +73,7 @@ def on_startup() -> None:
     configure_logging()
     if settings.auth_rbac_v2 and not settings.jwt_secret:
         raise RuntimeError("AUTH_RBAC_V2 is enabled but JWT_SECRET is missing")
+    get_llm_client()
     with SessionLocal() as session:
         bind = session.get_bind()
         if bind is None:

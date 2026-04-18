@@ -254,6 +254,8 @@ def get_runs(
     status: str | None = Query(default=None),
     started_from: datetime | None = Query(default=None),
     started_to: datetime | None = Query(default=None),
+    min_cost_usd: float | None = Query(default=None, ge=0),
+    max_cost_usd: float | None = Query(default=None, ge=0),
     auth: AuthContext = Depends(require_auth_or_context),
     session: Session = Depends(get_session),
 ) -> RunListResponse:
@@ -266,6 +268,8 @@ def get_runs(
         status=status,
         started_from=started_from,
         started_to=started_to,
+        min_cost_usd=min_cost_usd,
+        max_cost_usd=max_cost_usd,
     )
     total = repository.count_runs(
         session,
@@ -273,6 +277,8 @@ def get_runs(
         status=status,
         started_from=started_from,
         started_to=started_to,
+        min_cost_usd=min_cost_usd,
+        max_cost_usd=max_cost_usd,
     )
     quota_subjects = {
         str(record.state_json.get("quota_subject", auth.subject))
@@ -293,6 +299,7 @@ def get_runs(
             iteration_count=record.iteration_count,
             initial_token_budget=record.initial_token_budget,
             token_budget_remaining=record.token_budget_remaining,
+            estimated_cost_usd=float(record.estimated_cost_usd or 0.0),
             latest_checkpoint_seq=None,
             latest_checkpoint_at=None,
             started_at=_as_utc(record.started_at),
@@ -480,6 +487,7 @@ def get_run(
         iteration_count=record.iteration_count,
         initial_token_budget=record.initial_token_budget,
         token_budget_remaining=record.token_budget_remaining,
+        estimated_cost_usd=float(record.estimated_cost_usd or 0.0),
         latest_checkpoint_seq=latest_checkpoint.seq if latest_checkpoint else None,
         latest_checkpoint_at=_as_utc(latest_checkpoint.created_at) if latest_checkpoint else None,
         started_at=_as_utc(record.started_at),
@@ -540,6 +548,7 @@ def get_timeline(
         current_node=record.current_node,
         initial_token_budget=record.initial_token_budget,
         token_budget_remaining=record.token_budget_remaining,
+        estimated_cost_usd=float(record.estimated_cost_usd or 0.0),
         latest_checkpoint_seq=latest_checkpoint.seq if latest_checkpoint else None,
         latest_checkpoint_at=_as_utc(latest_checkpoint.created_at) if latest_checkpoint else None,
         metering_mode=str(token_totals.get("metering_mode", "estimated")),

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+import app.agents.nodes as nodes
 from app.agents.nodes import (
     analyst_node,
     critic_node,
@@ -41,6 +42,28 @@ class FakeResponse:
         return self._response_text
 
 
+class FakeClient:
+    provider = "ollama"
+    model = "nexus-model"
+
+    def __init__(self, response_text: str) -> None:
+        self.response_text = response_text
+        self.generate_calls: list[dict[str, object]] = []
+
+    def generate(self, prompt: str, *, max_tokens: int):
+        self.generate_calls.append({"prompt": prompt, "max_tokens": max_tokens})
+        completion_tokens = max(1, len(self.response_text) // 4)
+        return nodes.LLMGenerationResult(
+            text=self.response_text,
+            prompt_tokens=0,
+            completion_tokens=completion_tokens,
+            total_tokens=completion_tokens,
+            metering_mode="provider_exact",
+            provider=self.provider,
+            model=self.model,
+        )
+
+
 def make_state(**overrides) -> Any:
     state: dict[str, Any] = {
         "run_id": "run-1",
@@ -71,7 +94,7 @@ def make_state(**overrides) -> Any:
 
 
 def _patch_ollama(response_text: str):
-    return patch("app.agents.nodes.httpx.Client.post", return_value=FakeResponse(response_text))
+    return patch("app.agents.nodes.get_llm_client", return_value=FakeClient(response_text))
 
 
 def _assert_tokens_used(result):

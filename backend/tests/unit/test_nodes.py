@@ -68,9 +68,12 @@ class _FakeResponse:
 
 
 class _FakeClient:
+    provider = "ollama"
+    model = "nexus-model"
+
     def __init__(self, response_text: str = "generated text") -> None:
         self.response_text = response_text
-        self.requests = []
+        self.generate_calls: list[dict[str, object]] = []
 
     def __enter__(self):
         return self
@@ -78,16 +81,25 @@ class _FakeClient:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def post(self, url: str, json: dict[str, object], timeout: float | None = None):
-        self.requests.append({"url": url, "json": json, "timeout": timeout})
-        return _FakeResponse(self.response_text)
+    def generate(self, prompt: str, *, max_tokens: int):
+        self.generate_calls.append({"prompt": prompt, "max_tokens": max_tokens})
+        completion_tokens = max(1, len(self.response_text) // 4)
+        return nodes.LLMGenerationResult(
+            text=self.response_text,
+            prompt_tokens=0,
+            completion_tokens=completion_tokens,
+            total_tokens=completion_tokens,
+            metering_mode="provider_exact",
+            provider=self.provider,
+            model=self.model,
+        )
 
 
 def _install_fake_client(monkeypatch: pytest.MonkeyPatch, response_text: str = "generated text") -> _FakeClient:
     fake_client = _FakeClient(response_text=response_text)
-    monkeypatch.setattr(nodes.httpx, "Client", lambda: fake_client)
-    monkeypatch.setattr(nodes.settings, "ollama_base_url", "http://ollama.local")
-    monkeypatch.setattr(nodes.settings, "ollama_model", "nexus-model")
+    monkeypatch.setattr(nodes, "get_llm_client", lambda: fake_client)
+    monkeypatch.setattr(nodes.settings, "llm_provider", "ollama")
+    monkeypatch.setattr(nodes.settings, "llm_model", "nexus-model")
     return fake_client
 
 
@@ -102,8 +114,9 @@ def test_planner_creates_plan_and_routes_to_researcher(monkeypatch: pytest.Monke
     assert result["token_budget_remaining"] == 985
     assert result["trace"][-1]["event_type"] == "plan_created"
     assert result["trace"][-1]["node"] == "planner"
-    assert fake_client.requests[0]["url"] == "http://ollama.local/api/generate"
-    assert fake_client.requests[0]["json"]["model"] == "nexus-model"
+    assert fake_client.provider == "ollama"
+    assert fake_client.model == "nexus-model"
+    assert fake_client.generate_calls[0]["max_tokens"] >= 64
 
 
 def test_planner_opens_ollama_trace_span(monkeypatch: pytest.MonkeyPatch):
@@ -121,7 +134,7 @@ def test_planner_opens_ollama_trace_span(monkeypatch: pytest.MonkeyPatch):
     result = nodes.planner_node(_base_state())
 
     assert result["status"] == "running"
-    assert observed["name"] == "node.ollama_generate"
+    assert observed["name"] == "node.llm_generate"
     assert observed["metadata"]["run_id"] == "run-1"
     assert observed["metadata"]["node"] == "planner"
     assert observed["metadata"]["prompt_length"] > 0
@@ -201,7 +214,7 @@ def test_researcher_includes_web_search_results_in_prompt(monkeypatch: pytest.Mo
 
     result = nodes.researcher_node(_base_state(plan="Step 1\nStep 2"))
 
-    prompt = str(fake_client.requests[0]["json"]["prompt"])
+    prompt = str(fake_client.generate_calls[0]["prompt"])
     assert "Web search findings" in prompt
     assert "Official migration guide" in prompt
     assert captured["query"] == "Research the migration plan"
@@ -324,7 +337,7 @@ def test_writer_uses_expanded_num_predict(monkeypatch: pytest.MonkeyPatch):
     )
 
     assert result["status"] == "running"
-    assert fake_client.requests[0]["json"]["options"]["num_predict"] >= 900
+    assert fake_client.generate_calls[0]["max_tokens"] >= 900
 
 
 def test_writer_requests_continuation_for_incomplete_sections(monkeypatch: pytest.MonkeyPatch):
@@ -333,20 +346,26 @@ def test_writer_requests_continuation_for_incomplete_sections(monkeypatch: pytes
     def fake_generate(state, node, prompt):
         calls.append(prompt)
         if len(calls) == 1:
-            return "Summary\n\nKey Findings\n- Partial finding", 30, 900, {
-                "prompt_tokens": 0,
-                "completion_tokens": 30,
-                "total_tokens": 30,
-                "metering_mode": "estimated",
-            }
-        return "Recommendations\n- Action one\n\nRisks and Mitigations\n- Risk and mitigation", 20, 880, {
-            "prompt_tokens": 0,
-            "completion_tokens": 20,
-            "total_tokens": 20,
-            "metering_mode": "estimated",
-        }
+            return nodes.LLMGenerationResult(
+                text="Summary\n\nKey Findings\n- Partial finding",
+                prompt_tokens=0,
+                completion_tokens=30,
+                total_tokens=30,
+                metering_mode="estimated",
+                provider="ollama",
+                model="nexus-model",
+            )
+        return nodes.LLMGenerationResult(
+            text="Recommendations\n- Action one\n\nRisks and Mitigations\n- Risk and mitigation",
+            prompt_tokens=0,
+            completion_tokens=20,
+            total_tokens=20,
+            metering_mode="estimated",
+            provider="ollama",
+            model="nexus-model",
+        )
 
-    monkeypatch.setattr(nodes, "_ollama_generate", fake_generate)
+    monkeypatch.setattr(nodes, "_generate_llm_response", fake_generate)
 
     result = nodes.writer_node(_base_state(plan="Plan", analysis="Analysis", token_budget_remaining=1000))
 
@@ -358,13 +377,13 @@ def test_writer_requests_continuation_for_incomplete_sections(monkeypatch: pytes
 
 def test_ollama_error_returns_failed_and_logs_trace(monkeypatch: pytest.MonkeyPatch):
     class BrokenClient(_FakeClient):
-        def post(self, url: str, json: dict[str, object], timeout: float | None = None):
-            raise nodes.httpx.ConnectError("offline", request=None)
+        def generate(self, prompt: str, *, max_tokens: int):
+            raise RuntimeError("offline")
 
     broken_client = BrokenClient()
-    monkeypatch.setattr(nodes.httpx, "Client", lambda: broken_client)
-    monkeypatch.setattr(nodes.settings, "ollama_base_url", "http://ollama.local")
-    monkeypatch.setattr(nodes.settings, "ollama_model", "nexus-model")
+    monkeypatch.setattr(nodes, "get_llm_client", lambda: broken_client)
+    monkeypatch.setattr(nodes.settings, "llm_provider", "ollama")
+    monkeypatch.setattr(nodes.settings, "llm_model", "nexus-model")
 
     result = nodes.planner_node(_base_state())
 

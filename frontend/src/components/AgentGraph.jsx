@@ -41,13 +41,46 @@ export default function AgentGraph({ runStream = {} }) {
   const sortedEvents = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
   const seenNodes = new Set(sortedEvents.map((evt) => String(evt?.node || '').trim()).filter(Boolean));
 
-  const nodes = useMemo(() => {
-    const completedNodeIds = new Set(seenNodes);
+  const nodeTokenUsage = useMemo(() => {
+    const totals = {};
+    for (const evt of sortedEvents) {
+      const node = String(evt?.node || '').trim();
+      if (!node) continue;
+      const data = evt?.data || {};
+      const value = Number(
+        data.total_tokens ?? data.tokens_used ?? data.completion_tokens ?? 0
+      );
+      totals[node] = Number(totals[node] || 0) + (Number.isFinite(value) ? value : 0);
+    }
+    return totals;
+  }, [sortedEvents]);
 
+  const nodeStatus = useMemo(() => {
+    const statuses = {};
+    const failedStatuses = new Set(['failed', 'stopped', 'rejected', 'timeout']);
+    for (const meta of NODE_META) {
+      statuses[meta.id] = 'pending';
+    }
+
+    for (const node of seenNodes) {
+      if (statuses[node] === 'pending') {
+        statuses[node] = 'completed';
+      }
+    }
+
+    if (currentNode) {
+      statuses[currentNode] = failedStatuses.has(status) ? 'failed' : 'running';
+    }
+
+    return statuses;
+  }, [currentNode, seenNodes, status]);
+
+  const nodes = useMemo(() => {
     return initialNodes.map(node => {
-      const isActive = node.id === currentNode;
-      const isDone = completedNodeIds.has(node.id) && !isActive;
-      const isError = (status === 'failed' || status === 'stopped' || status === 'rejected') && isActive;
+      const state = nodeStatus[node.id] || 'pending';
+      const isActive = state === 'running';
+      const isDone = state === 'completed';
+      const isError = state === 'failed';
       
       let borderCol = '#46484e'; // outline-variant (waiting)
       let bgCol = '#171a20'; // surface-container
@@ -67,6 +100,13 @@ export default function AgentGraph({ runStream = {} }) {
       
       return {
         ...node,
+        data: {
+          ...node.data,
+          name: String(node.data?.label || node.id),
+          status: state,
+          tokenUsage: Number(nodeTokenUsage[node.id] || 0),
+        },
+        className: isActive ? 'animate-pulse' : '',
         style: {
           background: bgCol,
           color: textCol,
@@ -81,7 +121,7 @@ export default function AgentGraph({ runStream = {} }) {
         }
       };
     });
-  }, [currentNode, status, seenNodes]);
+  }, [nodeStatus, nodeTokenUsage]);
 
   const edges = useMemo(() => {
     const completedNodeIds = new Set(seenNodes);

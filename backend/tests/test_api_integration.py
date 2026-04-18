@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from app.core.settings import settings
 from app.db import repository
-from app.db.session import SessionLocal
+from conftest import TestingSessionLocal
 
 
 def _parse_sse(response_text: str) -> list[dict]:
@@ -230,6 +230,7 @@ def test_get_run_returns_correct_status(client, auth_headers, monkeypatch):
     status_response = client.get(f"/api/runs/{run_id}", headers=auth_headers)
     assert status_response.status_code == 200
     assert status_response.json()["status"] == "completed"
+    assert "estimated_cost_usd" in status_response.json()
 
 
 def test_get_runs_returns_total_count(client, auth_headers, monkeypatch):
@@ -248,6 +249,57 @@ def test_get_runs_returns_total_count(client, auth_headers, monkeypatch):
     payload = paged.json()
     assert len(payload["runs"]) == 1
     assert payload["total"] == 2
+    assert "estimated_cost_usd" in payload["runs"][0]
+
+
+def test_get_runs_supports_cost_filters(client, auth_headers, monkeypatch):
+    _install_fake_start_stream(monkeypatch)
+
+    create_response = client.post(
+        "/api/runs/stream",
+        json={"objective": "Cost filter coverage", "high_impact": False, "token_budget": 9000},
+        headers=auth_headers,
+    )
+    assert create_response.status_code == 200
+
+    only_free = client.get("/api/runs?min_cost_usd=0&max_cost_usd=0", headers=auth_headers)
+    assert only_free.status_code == 200
+    payload = only_free.json()
+    assert payload["total"] >= 1
+    assert all(float(run.get("estimated_cost_usd", 0.0)) <= 0.0 for run in payload["runs"])
+
+
+def test_get_runs_supports_min_cost_for_nonzero_run(client, auth_headers, monkeypatch):
+    _install_fake_start_stream(monkeypatch)
+
+    create_response = client.post(
+        "/api/runs/stream",
+        json={"objective": "Non-zero cost filter coverage", "high_impact": False, "token_budget": 9000},
+        headers=auth_headers,
+    )
+    assert create_response.status_code == 200
+    run_id = _parse_sse(create_response.text)[0]["data"]["run_id"]
+
+    with TestingSessionLocal() as session:
+        repository.append_token_usage(
+            session,
+            run_id=run_id,
+            seq=99,
+            node="planner",
+            provider="openai",
+            model="gpt-4o",
+            prompt_tokens=2000,
+            completion_tokens=1000,
+            total_tokens=3000,
+            metering_mode="actual",
+        )
+
+    non_zero = client.get("/api/runs?min_cost_usd=0.0001", headers=auth_headers)
+    assert non_zero.status_code == 200
+    payload = non_zero.json()
+    target = next((run for run in payload["runs"] if run.get("run_id") == run_id), None)
+    assert target is not None
+    assert float(target.get("estimated_cost_usd", 0.0)) > 0.0
 
 
 def test_get_timeline_returns_events(client, auth_headers, monkeypatch):
@@ -263,8 +315,10 @@ def test_get_timeline_returns_events(client, auth_headers, monkeypatch):
 
     timeline_response = client.get(f"/api/runs/{run_id}/timeline", headers=auth_headers)
     assert timeline_response.status_code == 200
-    timeline = timeline_response.json()["events"]
+    timeline_payload = timeline_response.json()
+    timeline = timeline_payload["events"]
     assert [event["seq"] for event in timeline] == [1, 2]
+    assert "estimated_cost_usd" in timeline_payload
 
 
 def test_get_metrics_returns_expected_shape(client, auth_headers, monkeypatch):
@@ -285,6 +339,9 @@ def test_get_metrics_returns_expected_shape(client, auth_headers, monkeypatch):
     assert "avg_token_usage_per_run" in payload
     assert "avg_steps_per_run" in payload
     assert "runs_last_24h" in payload
+    assert "total_cost_usd" in payload
+    assert "avg_cost_per_run_usd" in payload
+    assert "cost_by_provider" in payload
 
 
 def test_get_run_404_for_unknown(client, auth_headers):

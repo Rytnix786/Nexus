@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import TraceTimeline from './TraceTimeline';
@@ -19,7 +19,16 @@ vi.mock('./AgentGraph', () => ({
   default: () => <div data-testid="agent-graph" />,
 }));
 
+vi.mock('./ControlBar', () => ({
+  default: () => <div data-testid="control-bar" />,
+}));
+
+vi.mock('./BudgetResumePanel', () => ({
+  default: () => <div data-testid="budget-resume-panel" />,
+}));
+
 afterEach(() => {
+  cleanup();
   vi.clearAllMocks();
 });
 
@@ -42,5 +51,24 @@ describe('TraceTimeline', () => {
     expect(screen.getByText(/Active Run:/i)).toBeTruthy();
     expect(screen.getByText(/planner/i)).toBeTruthy();
     expect(screen.getByTestId('agent-graph')).toBeTruthy();
+  });
+
+  it('shows a meaningful empty timeline state before events arrive', () => {
+    render(
+      <TraceTimeline
+        runStream={{
+          status: 'running',
+          runId: 'run-empty',
+          currentNode: 'planner',
+          sortedEvents: [],
+          loading: false,
+          stopTargetRun: vi.fn(),
+          resumeWithBudgetTopUp: vi.fn(),
+        }}
+      />
+    );
+
+    expect(screen.getByText(/No timeline events yet/i)).toBeTruthy();
+    expect(screen.getByText(/Events will appear here as agents execute nodes/i)).toBeTruthy();
   });
 });

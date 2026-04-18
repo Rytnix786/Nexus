@@ -37,31 +37,15 @@ export async function getRunTimeline(runId) {
 }
 
 export async function stopRun(runId, payload = {}) {
-  const url = `${API_BASE}/runs/${runId}/stop`;
-  const token = runtimeToken || '<no-token>';
-  console.log('[stopRun] Request:', { url, runId, payload, hasToken: !!runtimeToken, token: token.substring(0, 20) + '...' });
-  
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    });
-    console.log('[stopRun] Response status:', res.status, res.statusText);
-    
-    if (!res.ok) {
-      const error = await buildHttpError('Stop run failed', res);
-      console.error('[stopRun] API Error:', error.message);
-      throw error;
-    }
-    
-    const result = await res.json();
-    console.log('[stopRun] Success:', result);
-    return result;
-  } catch (err) {
-    console.error('[stopRun] Network/Parse Error:', err.message || String(err), err);
-    throw err;
+  const res = await fetch(`${API_BASE}/runs/${runId}/stop`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await buildHttpError('Stop run failed', res);
   }
+  return res.json();
 }
 
 export async function listRuns({
@@ -71,6 +55,8 @@ export async function listRuns({
   status = '',
   startedFrom = '',
   startedTo = '',
+  minCostUsd = '',
+  maxCostUsd = '',
 } = {}) {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
@@ -79,6 +65,8 @@ export async function listRuns({
   if (status.trim()) params.set('status', status.trim());
   if (startedFrom) params.set('started_from', startedFrom);
   if (startedTo) params.set('started_to', startedTo);
+  if (String(minCostUsd).trim() !== '') params.set('min_cost_usd', String(minCostUsd).trim());
+  if (String(maxCostUsd).trim() !== '') params.set('max_cost_usd', String(maxCostUsd).trim());
 
   const res = await fetch(`${API_BASE}/runs?${params.toString()}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`List runs failed: ${res.status}`);

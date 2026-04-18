@@ -14,6 +14,8 @@
 ![Tested_with_Playwright](https://img.shields.io/badge/Tested_with-Playwright-2EAD33?logo=playwright&logoColor=white)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
+![Demo](docs/demo.gif)
+
 Nexus Researcher is a full-stack, stateful multi-agent orchestration system built with FastAPI, LangGraph, PostgreSQL, Redis, and React.
 
 It is designed around production-oriented patterns that many demos skip:
@@ -38,7 +40,7 @@ It is designed around production-oriented patterns that many demos skip:
 
 **Dashboard Panels**: All dashboard screens now use live API data instead of mock values:
 - Agent Pool: Real-time agent states (active/completed/idle) derived from run events
-- Models Panel: Accurate stack disclosure (Ollama only, no cloud provider mocking)
+- Models Panel: Accurate stack disclosure for Ollama, OpenAI, and Anthropic backends
 - Settings Panel: Live health badges from `/api/health/ratelimit` endpoint
 - Library Panel: Full file upload integration with session-based persistence
 
@@ -115,14 +117,15 @@ Five ADRs explain the rationale behind LangGraph selection, SSE transport, fail-
 | Web search | Tavily API (optional) | Structured results with URL and content; degrades to placeholder when absent |
 | Keyword retrieval | rank-bm25 (BM25Okapi) | Captures exact lexical matches that vector search misses |
 | Reranking | cross-encoder/ms-marco-MiniLM-L-6-v2 | Jointly scores query–document pairs; lazy-loaded, fail-open |
-| Tracing | LangSmith (opt-in, `LANGSMITH_ENABLED`) | Span-level trace of every Ollama call and retrieval step |
+| Tracing | LangSmith (opt-in, `LANGSMITH_ENABLED`) | Span-level trace of every LLM call and retrieval step |
+| Observability | OpenTelemetry + Jaeger | OTEL-compatible trace pipeline with Jaeger UI for local/debug trace analysis |
 | Eval framework | Promptfoo with custom JS evaluators | Adversarial tests in CI; prompt injection, refusal accuracy, grounded pass rate |
-| LLM inference | Ollama (local, configurable model) | No external API cost for local development; supports any Ollama-compatible model |
+| LLM inference | Ollama (local), OpenAI, Anthropic | Single `LLM_PROVIDER` switch (`ollama` / `openai` / `anthropic`) with provider-specific model + key configuration |
 | Content sniffing | python-magic (magic-byte inspection) | Rejects disguised executables on file upload |
 | Frontend | React 18 + Vite + Tailwind CSS | Real-time SSE consumer, timeline UI, approval workflow, graph visualizer, metrics dashboard |
 | CI | GitHub Actions (Python 3.11 / 3.12 / 3.14 canary) | Per-subsystem coverage thresholds; warning budget gate on canary Python |
 
-## Real Metrics
+## Measured Results
 
 | Metric | Value | Notes |
 |---|---|---|
@@ -134,13 +137,21 @@ Five ADRs explain the rationale behind LangGraph selection, SSE transport, fail-
 | Load test scenario 3 (SSE reconnect) | 0/42 successful | Insufficient timeline depth in test environment |
 | Load test scenario 4 (budget exhaustion) | 0/42 reached exhausted status | API minimum budget insufficient for exhaustion in test load |
 | Load test scenario 5 (idempotency) | 41/42 same run_id on duplicate | Dual-submit with same objective + idempotency key |
+| Refusal accuracy | 91.0% | Promptfoo `refusalCorrectness` summary from `evals/example-results.json` (18 tests, 2026-04-15) |
+| Avg cost per completed run | $0.0000 | Live run sample from local `/api/runs` (41 completed runs, zero recorded `estimated_cost_usd`) |
 | Python versions | 3.11, 3.12, 3.14 canary | CI matrix; warning budget gate on canary |
 | Cache hit latency | ~2ms | Normalized query cache in-memory response |
-| Node execution latency | ~200–800ms per node | Ollama-dependent; model load dominates first call |
+| Node execution latency | ~200–800ms per node | Provider-dependent; local Ollama model load dominates first call |
 
 ---
 
 ## Getting Started
+
+### Quick Deploy
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Rytnix786/Nexus)
+
+One-click deploy target: Railway template flow pointing to this repository. After deployment, set required variables (`POSTGRES_PASSWORD`, `API_KEY`, `JWT_SECRET`) and optional provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`) in Railway Variables.
 
 ### Prerequisites
 
@@ -179,7 +190,7 @@ LANGSMITH_ENABLED=false
 docker compose up --build
 ```
 
-This brings up PostgreSQL, Redis, Ollama, a backend API server, an RQ worker, and the React frontend. Alembic migrations run automatically on backend startup. Ollama model download on first run may take a few minutes.
+This brings up PostgreSQL, Redis, the configured LLM backend, a backend API server, an RQ worker, and the React frontend. Alembic migrations run automatically on backend startup. When `LLM_PROVIDER=ollama`, the Ollama model download on first run may take a few minutes.
 
 | Service | URL |
 |---|---|
@@ -285,7 +296,7 @@ NEXUS_R_Main/
 │   └── SLO_AND_ALERTING.md     # Service Level Objectives + alert policies
 ├── .github/workflows/
 │   └── ci.yml                  # GitHub Actions: tests, migrations, build, audit, gates
-├── docker-compose.yml          # Full stack: PostgreSQL, Redis, Ollama, backend, worker, frontend
+├── docker-compose.yml          # Full stack: PostgreSQL, Redis, LLM backend, backend, worker, frontend
 ├── .env.example                # Template for environment variables
 ├── Makefile                    # make load-test, make test, make lint, etc.
 ├── start.ps1                   # Windows startup script
@@ -368,7 +379,7 @@ The token ledger taught me that quota tracking and budget enforcement are differ
 
 **Current limitations:**
 
-- Ollama inference is hardware-dependent and not horizontally scalable as-is.
+- Ollama inference is hardware-dependent and not horizontally scalable as-is; OpenAI and Anthropic trade that for network latency and API cost.
 - Single-region deployment model (no multi-region failover).
 - Multi-tenant data isolation is not yet implemented; single tenant per deployment.
 - Persistent user knowledge base (long-term memory) is not yet implemented.
@@ -385,7 +396,7 @@ The token ledger taught me that quota tracking and budget enforcement are differ
 
 ### Docker stack will not start
 
-- Confirm Docker Desktop is running and `docker compose ps` shows `backend`, `frontend`, `postgres`, `redis`, and `ollama`.
+- Confirm Docker Desktop is running and `docker compose ps` shows `backend`, `frontend`, `postgres`, `redis`, and `ollama` when `LLM_PROVIDER=ollama`.
 - Rebuild the stack from the repository root with `docker compose up --build -d`.
 - Inspect recent failures with `docker compose logs --no-color --tail=100 backend worker frontend`.
 
@@ -429,8 +440,7 @@ Run load tests (Locust, headless):
 
 ```bash
 cd NEXUS_R_Main && make load-test
-# or: python -m locust -f backend/tests/load/locustfile.py \
-#     --host http://127.0.0.1:8000 --headless --users 10 --spawn-rate 2 --run-time 2m
+python -m locust -f backend/tests/load/locustfile.py --host http://127.0.0.1:8000 --headless --users 10 --spawn-rate 2 --run-time 2m
 ```
 
 Check migration status:

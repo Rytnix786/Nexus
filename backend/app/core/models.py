@@ -56,6 +56,7 @@ class RunStatusResponse(BaseModel):
     iteration_count: int
     initial_token_budget: int
     token_budget_remaining: int
+    estimated_cost_usd: float = 0.0
     latest_checkpoint_seq: int | None = None
     latest_checkpoint_at: datetime | None = None
     started_at: datetime
@@ -85,6 +86,7 @@ class RunTimelineResponse(BaseModel):
     current_node: str
     initial_token_budget: int
     token_budget_remaining: int
+    estimated_cost_usd: float = 0.0
     latest_checkpoint_seq: int | None = None
     latest_checkpoint_at: datetime | None = None
     metering_mode: str = "estimated"

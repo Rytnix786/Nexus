@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
+from app.core.cost import estimate_cost
 from app.db.tables import Base, IdempotencyRecord, QuotaWindow, RunCheckpoint, RunEvent, RunRecord, TokenUsageLedger
 
 logger = get_logger(__name__)
@@ -50,16 +51,23 @@ def _ensure_runs_schema(bind) -> None:
             )
             columns = {row[0] for row in result.fetchall()}
 
-        if "initial_token_budget" in columns:
-            return
+        if "initial_token_budget" not in columns:
+            try:
+                connection.exec_driver_sql(
+                    "ALTER TABLE runs ADD COLUMN initial_token_budget INTEGER NOT NULL DEFAULT 8000"
+                )
+            except OperationalError:
+                # If another process migrated the schema first, the app can continue normally.
+                pass
 
-        try:
-            connection.exec_driver_sql(
-                "ALTER TABLE runs ADD COLUMN initial_token_budget INTEGER NOT NULL DEFAULT 8000"
-            )
-        except OperationalError:
-            # If another process migrated the schema first, the app can continue normally.
-            return
+        if "estimated_cost_usd" not in columns:
+            try:
+                connection.exec_driver_sql(
+                    "ALTER TABLE runs ADD COLUMN estimated_cost_usd FLOAT NOT NULL DEFAULT 0.0"
+                )
+            except OperationalError:
+                # If another process migrated the schema first, the app can continue normally.
+                pass
 
 
 def create_run(session: Session, state: dict[str, Any]) -> None:
@@ -74,6 +82,7 @@ def create_run(session: Session, state: dict[str, Any]) -> None:
         iteration_count=int(safe_state["iteration_count"]),
         initial_token_budget=initial_budget,
         token_budget_remaining=int(safe_state["token_budget_remaining"]),
+        estimated_cost_usd=float(safe_state.get("estimated_cost_usd", 0.0) or 0.0),
         output=safe_state.get("final_output", ""),
         state_json=safe_state,
         started_at=state["started_at"],
@@ -93,6 +102,7 @@ def update_run(session: Session, state: dict[str, Any]) -> None:
     record.current_node = safe_state["current_node"]
     record.iteration_count = int(safe_state["iteration_count"])
     record.token_budget_remaining = int(safe_state["token_budget_remaining"])
+    record.estimated_cost_usd = float(safe_state.get("estimated_cost_usd", record.estimated_cost_usd) or 0.0)
     record.output = safe_state.get("final_output", "")
     record.state_json = safe_state
     record.updated_at = state["updated_at"]
@@ -127,7 +137,14 @@ def request_stop(session: Session, run_id: str, actor: str, reason: str) -> dict
     return state
 
 
-def _run_filters(search: str | None, status: str | None, started_from: datetime | None, started_to: datetime | None) -> list:
+def _run_filters(
+    search: str | None,
+    status: str | None,
+    started_from: datetime | None,
+    started_to: datetime | None,
+    min_cost_usd: float | None,
+    max_cost_usd: float | None,
+) -> list:
     filters = []
     if search:
         like = f"%{search.strip()}%"
@@ -138,6 +155,10 @@ def _run_filters(search: str | None, status: str | None, started_from: datetime 
         filters.append(RunRecord.started_at >= started_from)
     if started_to:
         filters.append(RunRecord.started_at <= started_to)
+    if min_cost_usd is not None:
+        filters.append(RunRecord.estimated_cost_usd >= float(min_cost_usd))
+    if max_cost_usd is not None:
+        filters.append(RunRecord.estimated_cost_usd <= float(max_cost_usd))
     return filters
 
 
@@ -149,9 +170,11 @@ def list_runs(
     status: str | None = None,
     started_from: datetime | None = None,
     started_to: datetime | None = None,
+    min_cost_usd: float | None = None,
+    max_cost_usd: float | None = None,
 ) -> list[RunRecord]:
     stmt = select(RunRecord)
-    filters = _run_filters(search, status, started_from, started_to)
+    filters = _run_filters(search, status, started_from, started_to, min_cost_usd, max_cost_usd)
     if filters:
         stmt = stmt.where(*filters)
     stmt = stmt.order_by(RunRecord.started_at.desc()).offset(offset).limit(limit)
@@ -164,9 +187,11 @@ def count_runs(
     status: str | None = None,
     started_from: datetime | None = None,
     started_to: datetime | None = None,
+    min_cost_usd: float | None = None,
+    max_cost_usd: float | None = None,
 ) -> int:
     stmt = select(func.count()).select_from(RunRecord)
-    filters = _run_filters(search, status, started_from, started_to)
+    filters = _run_filters(search, status, started_from, started_to, min_cost_usd, max_cost_usd)
     if filters:
         stmt = stmt.where(*filters)
     return int(session.scalar(stmt) or 0)
@@ -191,12 +216,39 @@ def get_system_metrics(session: Session) -> dict[str, Any]:
         session.scalar(select(func.count()).select_from(RunRecord).where(RunRecord.started_at >= cutoff)) or 0
     )
 
+    total_cost_usd = float(session.scalar(select(func.coalesce(func.sum(RunRecord.estimated_cost_usd), 0.0))) or 0.0)
+
+    avg_cost_per_run_usd = float(
+        session.scalar(
+            select(func.coalesce(func.avg(RunRecord.estimated_cost_usd), 0.0)).where(RunRecord.status == "completed")
+        )
+        or 0.0
+    )
+
+    provider_rows = session.execute(
+        select(
+            TokenUsageLedger.provider,
+            TokenUsageLedger.model,
+            func.coalesce(func.sum(TokenUsageLedger.prompt_tokens), 0),
+            func.coalesce(func.sum(TokenUsageLedger.completion_tokens), 0),
+        ).group_by(TokenUsageLedger.provider, TokenUsageLedger.model)
+    ).all()
+
+    cost_by_provider: dict[str, float] = {}
+    for provider, model, prompt_tokens, completion_tokens in provider_rows:
+        provider_key = str(provider or "unknown")
+        event_cost = estimate_cost(provider_key, str(model or ""), int(prompt_tokens or 0), int(completion_tokens or 0))
+        cost_by_provider[provider_key] = float(cost_by_provider.get(provider_key, 0.0) + event_cost)
+
     return {
         "total_runs": total_runs,
         "runs_by_status": runs_by_status,
         "avg_token_usage_per_run": avg_token_usage_per_run,
         "avg_steps_per_run": avg_steps_per_run,
         "runs_last_24h": runs_last_24h,
+        "total_cost_usd": total_cost_usd,
+        "avg_cost_per_run_usd": avg_cost_per_run_usd,
+        "cost_by_provider": cost_by_provider,
     }
 
 
@@ -229,14 +281,17 @@ def append_token_usage(
     retry_count: int = 0,
     billable: bool = True,
 ) -> None:
+    prompt_value = max(0, int(prompt_tokens))
+    completion_value = max(0, int(completion_tokens))
+
     row = TokenUsageLedger(
         run_id=run_id,
         seq=seq,
         node=node,
         provider=provider,
         model=model,
-        prompt_tokens=max(0, int(prompt_tokens)),
-        completion_tokens=max(0, int(completion_tokens)),
+        prompt_tokens=prompt_value,
+        completion_tokens=completion_value,
         total_tokens=max(0, int(total_tokens)),
         metering_mode=metering_mode,
         retry_count=max(0, int(retry_count)),
@@ -244,6 +299,15 @@ def append_token_usage(
         created_at=datetime.now(timezone.utc),
     )
     session.add(row)
+
+    # Increment run cost using this event's contribution to avoid a full ledger rescan.
+    run_record = session.get(RunRecord, run_id)
+    if run_record:
+        event_cost = estimate_cost(provider, model, prompt_value, completion_value)
+        current_cost = float(run_record.estimated_cost_usd or 0.0)
+        run_record.estimated_cost_usd = current_cost + float(event_cost)
+        run_record.updated_at = datetime.now(timezone.utc)
+
     session.commit()
 
 
@@ -264,6 +328,27 @@ def get_token_totals(session: Session, run_id: str) -> dict[str, Any]:
         "total_tokens_used": int(row[2] or 0),
         "metering_mode": str(row[3] or "estimated"),
     }
+
+
+def calculate_run_cost(session: Session, run_id: str) -> float:
+    """Calculate total estimated cost in USD for all token usage in a run."""
+    ledger_rows = session.execute(
+        select(
+            TokenUsageLedger.provider,
+            TokenUsageLedger.model,
+            func.sum(TokenUsageLedger.prompt_tokens).label("total_prompt"),
+            func.sum(TokenUsageLedger.completion_tokens).label("total_completion"),
+        )
+        .where(TokenUsageLedger.run_id == run_id)
+        .group_by(TokenUsageLedger.provider, TokenUsageLedger.model)
+    ).all()
+    
+    total_cost = 0.0
+    for provider, model, prompt_tokens, completion_tokens in ledger_rows:
+        cost = estimate_cost(provider, model, prompt_tokens or 0, completion_tokens or 0)
+        total_cost += cost
+    
+    return total_cost
 
 
 def get_or_create_daily_quota(session: Session, subject: str) -> QuotaWindow | _QuotaStub:

@@ -11,6 +11,16 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 cd "$ROOT_DIR"
+llm_provider="ollama"
+if [[ -f "$ENV_FILE" ]]; then
+  llm_provider="$(grep -E '^LLM_PROVIDER=' "$ENV_FILE" | head -n 1 | cut -d= -f2- | tr -d '\r' | tr '[:upper:]' '[:lower:]')"
+  llm_provider="${llm_provider:-ollama}"
+fi
+if [[ "$llm_provider" == "ollama" ]]; then
+  export COMPOSE_PROFILES=ollama
+else
+  unset COMPOSE_PROFILES || true
+fi
 docker compose up --build -d
 
 echo "Waiting for backend health at http://localhost:8000/api/health ..."

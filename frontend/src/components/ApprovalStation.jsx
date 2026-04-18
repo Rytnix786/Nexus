@@ -1,8 +1,52 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldAlert, ThumbsUp, ThumbsDown, CheckCircle, Loader2 } from 'lucide-react';
 
+function parseEventTs(evt) {
+  const candidates = [
+    evt?.data?.created_at,
+    evt?.data?.timestamp,
+    evt?.created_at,
+    evt?.timestamp,
+    evt?.ts,
+  ];
+  for (const raw of candidates) {
+    const ms = Date.parse(String(raw || ''));
+    if (Number.isFinite(ms)) return ms;
+  }
+  return null;
+}
+
+function formatElapsed(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
 export default function ApprovalStation({ runStream = {} }) {
   const [notes, setNotes] = useState('');
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const handle = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(handle);
+  }, []);
+
+  const pausedAtMs = useMemo(() => {
+    const events = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
+    for (let idx = events.length - 1; idx >= 0; idx -= 1) {
+      const evt = events[idx];
+      const type = String(evt?.event_type || evt?.event || '').toLowerCase();
+      if (type === 'awaiting_human' || type === 'awaiting_approval') {
+        const parsed = parseEventTs(evt);
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
+  }, [runStream.sortedEvents]);
+
+  const pausedElapsedMs = pausedAtMs != null ? Math.max(0, nowMs - pausedAtMs) : 0;
+  const showEscalationWarning = pausedElapsedMs >= 10 * 60 * 1000;
   const latestDraftFromTimeline = useMemo(() => {
     const events = Array.isArray(runStream.sortedEvents) ? runStream.sortedEvents : [];
     for (let idx = events.length - 1; idx >= 0; idx -= 1) {
@@ -36,14 +80,15 @@ export default function ApprovalStation({ runStream = {} }) {
 
   const handleApprove = () => {
     const reviewerNotes = notes.trim() || 'Approved by operator.';
-    runStream.submitDecision('approve', reviewerNotes);
+    runStream.submitDecision('approve', reviewerNotes, 'approved');
   };
   const handleReject = () => {
     if (!notes.trim()) {
       alert('Please provide a reason for rejection.');
       return;
     }
-    runStream.submitDecision('reject', notes);
+    const reason = notes.trim();
+    runStream.submitDecision('reject', reason, reason);
   };
 
   return (
@@ -59,6 +104,12 @@ export default function ApprovalStation({ runStream = {} }) {
         <div className="text-center mb-10">
           <h2 className="text-3xl font-headline font-bold text-[#f59e0b] mb-2 tracking-tight">Human Approval Required</h2>
           <p className="text-on-surface-variant font-body">The orchestrator has paused execution. Review the output before proceeding.</p>
+          <p className="mt-3 text-xs uppercase tracking-widest text-amber-200/90">Paused for {formatElapsed(pausedElapsedMs)}</p>
+          {showEscalationWarning && (
+            <p className="mt-2 rounded-lg border border-amber-300/45 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              Approval has been pending for more than 10 minutes. Escalate or provide a decision reason.
+            </p>
+          )}
         </div>
 
         <div className="mb-3 text-xs uppercase tracking-widest text-[#f59e0b] font-label">Draft Under Review</div>

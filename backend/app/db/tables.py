@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Float, JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -21,6 +21,7 @@ class RunRecord(Base):
     iteration_count: Mapped[int] = mapped_column(Integer, default=0)
     initial_token_budget: Mapped[int] = mapped_column(Integer, nullable=False, default=8000)
     token_budget_remaining: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     output: Mapped[str] = mapped_column(Text, default="")
     state_json: Mapped[dict] = mapped_column(JSON, default=dict)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

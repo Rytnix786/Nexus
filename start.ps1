@@ -10,6 +10,23 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 Set-Location $RootDir
+if (Test-Path $EnvFile) {
+    $llmProvider = 'ollama'
+    Get-Content $EnvFile | ForEach-Object {
+        if ($_ -match '^LLM_PROVIDER=(.*)$') {
+            $llmProvider = $Matches[1].Trim().ToLowerInvariant()
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($llmProvider)) {
+        $llmProvider = 'ollama'
+    }
+    if ($llmProvider -eq 'ollama') {
+        $env:COMPOSE_PROFILES = 'ollama'
+    }
+    else {
+        Remove-Item Env:COMPOSE_PROFILES -ErrorAction SilentlyContinue
+    }
+}
 docker compose up --build -d
 
 Write-Host 'Waiting for backend health at http://localhost:8000/api/health ...'

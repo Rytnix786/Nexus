@@ -1,3 +1,5 @@
+import { formatDollars } from './shared';
+
 function SystemMetricsPanel({ metrics, loading, open, onToggle }) {
   return (
     <section className="mt-6 rounded-[28px] border border-white/15 bg-black/30 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
@@ -17,6 +19,7 @@ function SystemMetricsPanel({ metrics, loading, open, onToggle }) {
           <article className="rounded-2xl border border-white/15 bg-black/20 p-4"><p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Runs Last 24h</p><p className="mt-2 text-3xl font-semibold text-white">{metrics.runs_last_24h}</p></article>
           <article className="rounded-2xl border border-white/15 bg-black/20 p-4"><p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Avg Token Usage / Run</p><p className="mt-2 text-3xl font-semibold text-white">{Math.round(metrics.avg_token_usage_per_run)}</p></article>
           <article className="rounded-2xl border border-white/15 bg-black/20 p-4"><p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Avg Steps / Run</p><p className="mt-2 text-3xl font-semibold text-white">{Number(metrics.avg_steps_per_run || 0).toFixed(1)}</p></article>
+          <article className="rounded-2xl border border-white/15 bg-black/20 p-4"><p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Total Spend</p><p className="mt-2 text-3xl font-semibold text-white">{formatDollars(metrics.total_cost_usd)}</p></article>
           <article className="rounded-2xl border border-white/15 bg-black/20 p-4 md:col-span-2 xl:col-span-4">
             <p className="text-[11px] uppercase tracking-[0.14em] text-white/55">Runs By Status</p>
             <div className="mt-3 flex flex-wrap gap-2">

@@ -20,6 +20,8 @@ export function useRuns(perPage = 12) {
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [minCostUsd, setMinCostUsd] = useState('');
+  const [maxCostUsd, setMaxCostUsd] = useState('');
   const [error, setError] = useState('');
   const [systemMetricsLoading, setSystemMetricsLoading] = useState(false);
 
@@ -41,6 +43,8 @@ export function useRuns(perPage = 12) {
         status: statusFilter,
         startedFrom: dateFrom ? new Date(`${dateFrom}T00:00:00`).toISOString() : '',
         startedTo: dateTo ? new Date(`${dateTo}T23:59:59`).toISOString() : '',
+        minCostUsd,
+        maxCostUsd,
       });
       setRecentRuns(payload.runs || []);
       setRunExplorerTotal(Number(payload.total || 0));
@@ -53,7 +57,7 @@ export function useRuns(perPage = 12) {
     } finally {
       setRecentRunsLoading(false);
     }
-  }, [runExplorerPage, searchText, statusFilter, dateFrom, dateTo, perPage]);
+  }, [runExplorerPage, searchText, statusFilter, dateFrom, dateTo, minCostUsd, maxCostUsd, perPage]);
 
   const fetchSystemMetrics = useCallback(async () => {
     setSystemMetricsLoading(true);
@@ -121,6 +125,10 @@ export function useRuns(perPage = 12) {
     setDateFrom,
     dateTo,
     setDateTo,
+    minCostUsd,
+    setMinCostUsd,
+    maxCostUsd,
+    setMaxCostUsd,
     fetchRecentRuns,
     systemMetrics,
     systemMetricsLoading,

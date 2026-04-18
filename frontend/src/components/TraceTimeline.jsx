@@ -6,6 +6,8 @@ import { useNexusApp } from '../state/NexusAppContext';
 import ApprovalStation from './ApprovalStation';
 import RunArtifact from './RunArtifact';
 import AgentGraph from './AgentGraph';
+import ControlBar from './ControlBar';
+import BudgetResumePanel from './BudgetResumePanel';
 
 function getIconForEventType(type) {
   if (type === 'search') return <Globe className="w-4 h-4" />;
@@ -121,10 +123,35 @@ export default function TraceTimeline({ runStream = {} }) {
           </div>
         </div>
 
+          {/* ControlBar with Stop Button */}
+          <ControlBar
+            runId={runId}
+            status={status}
+            remainingTokens={runStream.remainingTokens || 0}
+            onStop={() => runStream.stopTargetRun(runId)}
+            loading={runStream.loading || false}
+          />
+
+          {/* Budget Exhausted Panel */}
+          {status === 'budget_exhausted' && (
+            <BudgetResumePanel
+              runId={runId}
+              currentBudgetRemaining={runStream.remainingTokens || 0}
+              estimatedBurnRate={undefined}
+              onResume={(amount) => runStream.resumeWithBudgetTopUp(amount, runId)}
+              onCancel={() => {}}
+              loading={runStream.loading || false}
+              error={runStream.error || ''}
+            />
+          )}
+
         {/* Scrollable Container */}
         <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto pr-4 custom-scrollbar pb-32">
            {clusteredNodes.length === 0 && !runStream.loading && (
-             <p className="mt-10 text-on-surface-variant italic">Waiting for events...</p>
+             <div className="mt-10 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-6 text-center">
+               <p className="text-base font-semibold text-on-surface">No timeline events yet</p>
+               <p className="mt-2 text-sm text-on-surface-variant">Events will appear here as agents execute nodes and emit checkpoints.</p>
+             </div>
           )}
 
           <div className="space-y-8 mt-4 pt-4">
@@ -260,15 +287,6 @@ export default function TraceTimeline({ runStream = {} }) {
             <span className="text-xs font-label text-on-surface-variant font-mono truncate max-w-[150px]">
               {runId ? `watching ${runId.substring(0, 8)}...` : 'idle'}
             </span>
-          </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => runStream.stopTargetRun(runId)}
-              disabled={!runStream.canStopCurrentRun}
-              className="w-10 h-10 flex items-center justify-center hover:bg-error/10 rounded-full transition-colors text-error disabled:opacity-30"
-            >
-              <Square className="w-4 h-4 fill-current" />
-            </button>
           </div>
         </div>
       </aside>

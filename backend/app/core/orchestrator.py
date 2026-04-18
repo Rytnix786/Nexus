@@ -304,13 +304,15 @@ class Orchestrator:
                             completion_tokens = int(event_data.get("completion_tokens", event_data.get("tokens_used", 0)) or 0)
                             total_tokens = int(event_data.get("total_tokens", event_data.get("tokens_used", 0)) or 0)
                             metering_mode = str(event_data.get("metering_mode", "estimated"))
+                            provider = str(event_data.get("provider", settings.llm_provider))
+                            model = str(event_data.get("model", settings.llm_model))
                             repository.append_token_usage(
                                 session=session,
                                 run_id=last_state["run_id"],
                                 seq=emitted_seq,
                                 node=str(evt["node"]),
-                                provider="ollama",
-                                model=settings.ollama_model,
+                                provider=provider,
+                                model=model,
                                 prompt_tokens=prompt_tokens,
                                 completion_tokens=completion_tokens,
                                 total_tokens=total_tokens,

@@ -195,13 +195,32 @@ def _extract_first_run_id(events_in: list[dict[str, Any]]) -> str:
 
 
 def _extract_total_tokens(final_event_data: dict[str, Any], run_status_payload: dict[str, Any] | None) -> int:
+    # Try final event data first
     val = final_event_data.get("total_tokens_used")
     if isinstance(val, int):
         return val
+    
+    # Try nested token usage fields
+    if "usage" in final_event_data:
+        usage = final_event_data["usage"]
+        if isinstance(usage, dict):
+            total = usage.get("total_tokens")
+            if isinstance(total, int):
+                return total
+    
+    # Try run status payload
     if run_status_payload is not None:
         total = run_status_payload.get("total_tokens_used")
         if isinstance(total, int):
             return total
+        # Try usage field in status payload
+        if "usage" in run_status_payload:
+            usage = run_status_payload["usage"]
+            if isinstance(usage, dict):
+                total = usage.get("total_tokens")
+                if isinstance(total, int):
+                    return total
+    
     return 0
 
 
@@ -228,12 +247,28 @@ class _BaseNexusUser(HttpUser):
     abstract = True
     wait_time = constant(0.25)
 
+    def _wait_for_approval_state(self, run_id: str, timeout_seconds: int = 30) -> bool:
+        """Poll run status until it reaches awaiting_human state or timeout."""
+        headers = _base_headers()
+        start_time = time.perf_counter()
+        
+        while time.perf_counter() - start_time < timeout_seconds:
+            status_resp = self.client.get(f"/api/runs/{run_id}", headers=headers, name="approval_status_check")
+            if status_resp.status_code == 200:
+                status_data = status_resp.json()
+                if str(status_data.get("status") or "") == "awaiting_human":
+                    return True
+            time.sleep(1)  # Poll every second
+        
+        return False
+
     def _stream_run(
         self,
         *,
         objective: str,
         token_budget: int,
         idempotency_key: str | None = None,
+        high_impact: bool = False,
         request_name: str = "/api/runs/stream",
     ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], str]:
         headers = _base_headers()
@@ -242,7 +277,7 @@ class _BaseNexusUser(HttpUser):
 
         payload = {
             "objective": objective,
-            "high_impact": False,
+            "high_impact": high_impact,
             "token_budget": token_budget,
         }
 
@@ -354,10 +389,12 @@ class SSEReconnectResilienceUser(_BaseNexusUser):
     def sse_reconnect(self) -> None:
         RECORDER.reconnect_attempt()
 
+        # Use high-impact run to force human approval pause for proper reconnect testing
         objective = f"Reconnect objective {uuid.uuid4().hex}: evaluate replay correctness over SSE reconnect."
         first_result, first_events, err = self._stream_run(
             objective=objective,
             token_budget=8000,
+            high_impact=True,  # Force human approval pause
             request_name="scenario3:first:/api/runs/stream",
         )
         if first_result is None:
@@ -369,18 +406,34 @@ class SSEReconnectResilienceUser(_BaseNexusUser):
             RECORDER.reconnect_error("initial stream missing run_id")
             return
 
+        # Wait for human approval state (poll for up to 30 seconds)
+        approval_reached = self._wait_for_approval_state(run_id, timeout_seconds=30)
+        if not approval_reached:
+            RECORDER.reconnect_error("run never reached approval state within timeout")
+            return
+
+        # Get timeline events for reconnect testing
         timeline_headers = _base_headers()
         timeline_resp = self.client.get(f"/api/runs/{run_id}/timeline", headers=timeline_headers, name="scenario3:/api/runs/{id}/timeline")
         if timeline_resp.status_code != 200:
             RECORDER.reconnect_error(f"timeline fetch failed: {timeline_resp.status_code}")
             return
 
-        timeline_events = list((timeline_resp.json() or {}).get("events") or [])
+        timeline_data = timeline_resp.json() or {}
+        timeline_events = list(timeline_data.get("events") or [])
+        
+        # If we don't have enough timeline events, use the events from the initial stream
         if len(timeline_events) < 3:
-            RECORDER.reconnect_error("not enough timeline events for reconnect check")
-            return
+            # Extract timeline events from the initial stream
+            timeline_events_from_stream = [event for event in first_events if event.get("event") == "timeline"]
+            if len(timeline_events_from_stream) >= 3:
+                timeline_events = timeline_events_from_stream
+            else:
+                RECORDER.reconnect_error(f"insufficient timeline events: {len(timeline_events)} < 3")
+                return
 
-        last_seen_seq = int(timeline_events[2]["seq"])
+        # Use the 3rd event for reconnect testing (more reliable than first)
+        last_seen_seq = int(timeline_events[2]["data"]["seq"])
         expected_next = last_seen_seq + 1
 
         reconnect_headers = _base_headers()
@@ -425,39 +478,79 @@ class BudgetExhaustionUser(_BaseNexusUser):
 
     @task
     def budget_exhaustion_then_resume(self) -> None:
-        # API validation currently enforces token_budget >= 1000.
-        start_budget = 1000
+        # Use minimum budget to force rapid exhaustion
+        start_budget = 1000  # API minimum possible budget
         objective = f"Budget path objective {uuid.uuid4().hex}: force budget exhaustion and resume."
-
+        
+        # Try to exhaust budget with a single small-budget run first
+        exhausted_run_id = None
         result, events_in, err = self._stream_run(
             objective=objective,
             token_budget=start_budget,
-            request_name="scenario4:/api/runs/stream",
+            request_name="scenario4:exhaustion_attempt/api/runs/stream",
         )
-
+        
         RECORDER.budget_attempt(effective_budget=start_budget)
-
+        
         if result is None:
-            RECORDER.budget_error(err)
+            RECORDER.budget_error(f"initial run failed: {err}")
             return
-
+            
         run_id = str(result.get("run_id") or "")
         if not run_id:
-            RECORDER.budget_error("run_id missing from budget scenario")
+            RECORDER.budget_error("initial run missing run_id")
             return
-
-        if not _is_budget_exhausted(events_in):
-            status_payload = result.get("run_status") or {}
-            if str(status_payload.get("status") or "") != "budget_exhausted":
-                RECORDER.budget_error("run did not enter budget_exhausted")
-                return
-
-        RECORDER.budget_exhausted()
-
+        
+        # Check if this run hit budget exhaustion
+        if _is_budget_exhausted(events_in):
+            exhausted_run_id = run_id
+            RECORDER.budget_exhausted()
+        else:
+            # If not exhausted, try to force it with multiple rapid runs
+            for i in range(10):  # Try up to 10 additional runs
+                result, events_in, err = self._stream_run(
+                    objective=f"{objective} (run {i+1})",
+                    token_budget=start_budget,
+                    request_name=f"scenario4:exhaustion_run_{i+1}/api/runs/stream",
+                )
+                
+                RECORDER.budget_attempt(effective_budget=start_budget)
+                
+                if result is None:
+                    RECORDER.budget_error(f"run {i+1} failed: {err}")
+                    continue
+                    
+                run_id = str(result.get("run_id") or "")
+                if not run_id:
+                    RECORDER.budget_error(f"run {i+1} missing run_id")
+                    continue
+                
+                # Check if this run hit budget exhaustion
+                if _is_budget_exhausted(events_in):
+                    exhausted_run_id = run_id
+                    RECORDER.budget_exhausted()
+                    break
+                
+                # Also check status for budget_exhausted
+                status_payload = result.get("run_status") or {}
+                if str(status_payload.get("status") or "") == "budget_exhausted":
+                    exhausted_run_id = run_id
+                    RECORDER.budget_exhausted()
+                    break
+                    
+                # Very small delay between runs
+                time.sleep(0.1)
+        
+        if not exhausted_run_id:
+            # If still no exhaustion, use the last run anyway for testing resume functionality
+            exhausted_run_id = run_id
+            RECORDER.budget_error("no run reached budget_exhausted state, testing resume anyway")
+        
+        # Now test budget resume functionality
         headers = _base_headers()
         headers["Idempotency-Key"] = f"resume-budget-{uuid.uuid4().hex}"
         resume_resp = self.client.post(
-            f"/api/runs/{run_id}/resume-budget/stream",
+            f"/api/runs/{exhausted_run_id}/resume-budget/stream",
             headers=headers,
             json={"additional_budget": 4000},
             stream=True,
