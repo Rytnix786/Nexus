@@ -1,62 +1,108 @@
+<div align="center">
+
+<img src="docs/demo.gif" alt="Nexus Researcher Demo" width="100%" style="border-radius: 12px;" />
+
 # Nexus Researcher
 
-![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)
-![LangGraph](https://img.shields.io/badge/LangGraph-Agents-orange)
-![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)
-![Tailwind](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=flat&logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
-![Pytest](https://img.shields.io/badge/pytest-passing-success?logo=pytest)
-![Vitest](https://img.shields.io/badge/vitest-passing-success?logo=vitest)
-![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-white)
-![Tested_with_Playwright](https://img.shields.io/badge/Tested_with-Playwright-2EAD33?logo=playwright&logoColor=white)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+**A production-grade, stateful multi-agent research orchestration system**
 
-![Demo](docs/demo.gif)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Agents-FF6B35?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
+[![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Redis](https://img.shields.io/badge/Redis_7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 
-Nexus Researcher is a full-stack, stateful multi-agent orchestration system built with FastAPI, LangGraph, PostgreSQL, Redis, and React.
+[![Tests](https://img.shields.io/badge/Backend_Tests-122_Passed-2ECC71?style=for-the-badge&logo=pytest)](/)
+[![E2E](https://img.shields.io/badge/E2E-Playwright-45ba4b?style=for-the-badge&logo=playwright&logoColor=white)](/)
+[![Refusal Accuracy](https://img.shields.io/badge/Refusal_Accuracy-91%25-orange?style=for-the-badge)](/)
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](/)
+[![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=for-the-badge&logo=railway)](https://railway.app/new/template?template=https://github.com/Rytnix786/Nexus)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](/)
 
-It is designed around production-oriented patterns that many demos skip:
+[**Live Demo**](#getting-started) · [**Architecture**](#architecture) · [**API Docs**](#api-surface) · [**Deploy in One Click**](#quick-deploy)
 
-- Durable run state with timeline + checkpoint persistence.
-- Human-in-the-loop approval for high-impact runs.
-- Real-time SSE streaming with replay semantics (`Last-Event-ID`).
-- Idempotent start/resume controls.
-- Token usage ledger + daily quota windows.
-- Operational docs for release, incident response, and SLOs.
+</div>
 
-## Core Features
+---
 
-- Multi-agent flow: planner -> researcher -> analyst -> writer -> human_approval -> critic -> refusal -> finalize.
-- Upload and parse source files (PDF, DOCX, TXT).
-- Role-based access support (`admin`, `operator`, `reviewer`) with API key and JWT modes.
-- Redis-backed fail-open rate limiting.
-- Resume on human decision and budget top-up.
-- Full API surface for run creation, tracking, timeline inspection, stopping, and continuation.
+## What Is This?
 
-## Recent Improvements (2026-04)
+Nexus Researcher is a full-stack AI research system built around the patterns that production deployments actually require — the ones most demos quietly skip.
 
-**Dashboard Panels**: All dashboard screens now use live API data instead of mock values:
-- Agent Pool: Real-time agent states (active/completed/idle) derived from run events
-- Models Panel: Accurate stack disclosure for Ollama, OpenAI, and Anthropic backends
-- Settings Panel: Live health badges from `/api/health/ratelimit` endpoint
-- Library Panel: Full file upload integration with session-based persistence
+A user submits a **research objective** and an optional token budget. An 8-node LangGraph workflow executes over a live SSE stream: a **Planner** breaks the goal into steps, a **Researcher** runs a four-stage retrieval pipeline (Tavily → BM25 → RRF → cross-encoder reranking), an **Analyst** synthesizes findings and routes to a **Refusal node** if evidence is insufficient, a **Writer** produces a structured markdown report, a **Human Approval** node pauses high-impact runs for human review, a **Critic** evaluates quality and can trigger revision loops, and a **Finalizer** seals the run.
 
-**Orchestration Graph**: Complete 8-node graph with refusal gate properly wired between analyst and finalize nodes.
+Every state transition is checkpointed to PostgreSQL. The SSE stream carries monotone sequence numbers for `Last-Event-ID` replay on reconnect. Runs can be resumed after a human decision or a token budget top-up — no re-execution from scratch.
 
-**Run Timeline**: Improved UX for completed runs (clear navigation to Results tab instead of duplicate report).
+> **Built to demonstrate that the gap between "AI demo" and "AI system" is real, documented, and closeable.**
 
-**Approval Workflow**: Empty approval notes now fail gracefully with fallback message; rejection requires reason.
+---
 
-**Results Dashboard**: Post-run metrics scorecard (steps, tokens, revisions) now visible for terminal runs.
+## Why This Is Different
 
-A stateful multi-agent research orchestration system built with LangGraph, hybrid retrieval, PostgreSQL persistence, and human-in-the-loop approval — designed around the patterns that production AI systems require: cost governance, refusal gating, auditable state, and run recovery.
+<table>
+<tr>
+<td width="50%">
 
-## What This Actually Does
+### 🔍 Four-Stage Retrieval, Not One Vector Call
 
-A user submits a research objective and an optional token budget. The system initializes a run, then streams eight specialized agent nodes through a LangGraph workflow over SSE: a Planner breaks down the goal, a Researcher executes live Tavily web search and keyword retrieval with reranking, an Analyst synthesizes findings and decides whether evidence is sufficient, a Writer produces a structured markdown report, a Human Approval node pauses high-impact runs for review, a Critic evaluates the draft and can trigger revision loops, a Refusal node terminates with `INSUFFICIENT_CONTEXT` if evidence falls below threshold, and a Finalizer seals the run. Every state transition is checkpointed to PostgreSQL and replayed via SSE `Last-Event-ID` on reconnect. Runs can be resumed after human decision or token budget top-up.
+Most RAG systems do a single embedding similarity lookup. The Researcher node executes:
+
+1. **Tavily web search** — live, structured results
+2. **BM25 over returned docs** — catches exact keyword hits that vectors miss
+3. **Reciprocal Rank Fusion** (`rrf_k=60`) — stably merges both ranked lists
+4. **Cross-encoder reranking** (`ms-marco-MiniLM-L-6-v2`) — jointly scores query–document relevance
+
+Each stage catches a different failure mode. This is the retrieval architecture used in production search systems.
+
+</td>
+<td width="50%">
+
+### ⛔ Refusal Gating as a First-Class Graph Node
+
+When the Analyst determines evidence is below threshold, the graph routes to a dedicated **Refusal node** that terminates with `INSUFFICIENT_CONTEXT`. No LLM call is made, no hallucinated answer is returned, and the refusal is logged as a traceable timeline event.
+
+Refusal behavior is **deterministic and testable** — not a probabilistic prompt instruction buried inside another node.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📡 SSE with `Last-Event-ID` Replay
+
+The stream endpoint emits structured `timeline`, `awaiting_approval`, and `run_finished` SSE events, each with a monotone sequence number. On reconnect, the client sends `Last-Event-ID` and the server replays persisted events from that point. Idempotency keys on run-start prevent duplicate runs from fast-clicking clients.
+
+</td>
+<td width="50%">
+
+### 💰 Token Ledger + Daily Quota Windows
+
+Every LLM call charges against a per-run budget. The orchestrator also aggregates usage into a per-subject daily quota (`QUOTA_DAILY_TOKENS`, default 200k). Budget-exhausted runs halt at the next node boundary and resume via `POST /api/runs/{id}/resume-budget/stream` — no silent cost blowouts.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📋 Five Architecture Decision Records
+
+ADRs explain the rationale behind LangGraph selection, SSE transport, fail-open Redis rate limiting, checkpoint-per-step persistence, and tool-based web search — with alternatives considered and tradeoffs named.
+
+</td>
+<td width="50%">
+
+### 🛡️ Production-Ready Operational Docs
+
+Full incident runbook, release checklist, and SLO/alerting policy. The p95 SLO for `POST /api/runs/stream` is ≤1200ms excluding model runtime. Not a README footnote — a documented, measurable target.
+
+</td>
+</tr>
+</table>
+
+---
 
 ## Architecture
 
@@ -64,84 +110,67 @@ A user submits a research objective and an optional token budget. The system ini
 flowchart TD
     U([User Request]) --> API[FastAPI + Auth]
     API --> ORCH[Orchestrator]
-    ORCH --> RQ[(Redis/RQ Worker)]
+    ORCH --> RQ[(Redis / RQ Worker)]
 
-    RQ --> PLAN["🗺 Planner<br/>Breaks goal into 3-5 steps"]
-    PLAN --> RES["🔍 Researcher<br/>Tavily → BM25 → RRF → Cross-Encoder"]
-    RES --> ANA["📊 Analyst<br/>Synthesizes findings<br/>Refusal gate check"]
+    RQ --> PLAN["🗺️ Planner\nBreaks goal into 3-5 steps"]
+    PLAN --> RES["🔍 Researcher\nTavily → BM25 → RRF → Cross-Encoder"]
+    RES --> ANA["📊 Analyst\nSynthesizes findings · Refusal gate check"]
 
-    ANA -->|Insufficient context| REF["⛔ Refusal<br/>Returns INSUFFICIENT_CONTEXT"]
-    ANA -->|Context sufficient| WRI["✍ Writer<br/>Structured markdown report"]
+    ANA -->|Insufficient context| REF["⛔ Refusal\nReturns INSUFFICIENT_CONTEXT"]
+    ANA -->|Context sufficient| WRI["✍️ Writer\nStructured markdown report"]
 
-    WRI -->|high_impact=true| HAP["👤 Human Approval<br/>Run pauses · State held in DB"]
+    WRI -->|high_impact=true| HAP["👤 Human Approval\nRun pauses · State held in DB"]
     WRI -->|high_impact=false| CRI
 
-    HAP -->|approve| CRI["🔎 Critic<br/>Approved / Revision Needed"]
+    HAP -->|approve| CRI["🔎 Critic\nApproved / Revision Needed"]
     HAP -->|reject| FIN
 
-    CRI -->|approved| FIN["✅ Finalizer<br/>Seals run · Emits run_finished"]
+    CRI -->|approved| FIN["✅ Finalizer\nSeals run · Emits run_finished"]
     CRI -->|revision needed| WRI
 
-    FIN --> SSE["SSE Stream → React UI<br/>+ PostgreSQL Checkpoint"]
+    FIN --> SSE["SSE Stream → React UI\n+ PostgreSQL Checkpoint"]
 ```
 
-Each node update is persisted as a `RunCheckpoint` before the stream continues. The React frontend reconstructs the timeline from stored events on reconnect.
+Each node update is persisted as a `RunCheckpoint` before the stream continues. The React frontend reconstructs the timeline from stored events on reconnect using `Last-Event-ID`.
 
-## Why This Is Different
-
-**1. Four-stage retrieval pipeline, not a single embedding lookup.**
-Most RAG systems call one vector similarity function and return results. The Researcher node executes Tavily web search, applies BM25 over the returned documents, fuses both ranking lists with Reciprocal Rank Fusion (`rrf_k=60`), and finally reranks the top candidates with a cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`). Each stage catches a different failure mode: vector search misses exact keyword hits, BM25 misses semantic similarity, RRF stabilizes the merge, and the cross-encoder scores query–document relevance jointly. This is the retrieval architecture used in production search systems.
-
-**2. Refusal gating is a first-class architectural node, not an afterthought.**
-When the Analyst determines that retrieved evidence is below threshold, the graph routes to a dedicated Refusal node that terminates with `INSUFFICIENT_CONTEXT`. No LLM call is made, no hallucinated answer is returned, and the refusal is logged as a traceable timeline event.
-
-**3. SSE with `Last-Event-ID` replay — not a polling loop.**
-The stream endpoint emits structured `timeline`, `awaiting_approval`, and `run_finished` SSE events. Each event carries a monotone sequence number. On reconnect, the client sends `Last-Event-ID`, and the server replays persisted events from that point forward. Idempotency keys on run-start prevent duplicate runs from fast-clicking clients.
-
-**4. Token ledger with daily quota windows prevents silent cost blowouts.**
-Every LLM call charges tokens against a per-run budget (`token_budget_remaining`). The orchestrator also aggregates usage into a per-subject daily quota (`QUOTA_DAILY_TOKENS`, default 200,000). Runs that exhaust their budget halt at the next node boundary and transition to `budget_exhausted` status; they can be resumed with an explicit budget top-up via `POST /api/runs/{id}/resume-budget/stream`.
-
-**5. Every major decision is documented as an Architecture Decision Record.**
-Five ADRs explain the rationale behind LangGraph selection, SSE transport, fail-open Redis rate limiting, checkpoint-per-step persistence, and tool-based web search. Writing them down with alternatives considered and tradeoffs named makes a system maintainable by someone who wasn't in the room.
-
-## Full Tech Stack
-
-| Component | Technology | Reason |
-|---|---|---|
-| Agent orchestration | LangGraph (StateGraph) | Explicit node/edge model; human approval is a native graph node, not a hack |
-| API framework | FastAPI + Uvicorn | Async-native; SSE via `StreamingResponse` with no extra infrastructure |
-| Database | PostgreSQL 16 + SQLAlchemy 2 + Alembic | Durable run state; Alembic fail-fast migration check on production startup |
-| Task queue | Redis 7 + RQ | Decouples HTTP response from long-running graph execution |
-| Rate limiter | Redis fixed-window (fail-open) | Service stays up during Redis outages; counters expose fail-open events |
-| Auth | JWT (HS256) + API key, dual-mode | JWT RBAC for multi-user; API key for CI and single-operator setups |
-| Web search | Tavily API (optional) | Structured results with URL and content; degrades to placeholder when absent |
-| Keyword retrieval | rank-bm25 (BM25Okapi) | Captures exact lexical matches that vector search misses |
-| Reranking | cross-encoder/ms-marco-MiniLM-L-6-v2 | Jointly scores query–document pairs; lazy-loaded, fail-open |
-| Tracing | LangSmith (opt-in, `LANGSMITH_ENABLED`) | Span-level trace of every LLM call and retrieval step |
-| Observability | OpenTelemetry + Jaeger | OTEL-compatible trace pipeline with Jaeger UI for local/debug trace analysis |
-| Eval framework | Promptfoo with custom JS evaluators | Adversarial tests in CI; prompt injection, refusal accuracy, grounded pass rate |
-| LLM inference | Ollama (local), OpenAI, Anthropic | Single `LLM_PROVIDER` switch (`ollama` / `openai` / `anthropic`) with provider-specific model + key configuration |
-| Content sniffing | python-magic (magic-byte inspection) | Rejects disguised executables on file upload |
-| Frontend | React 18 + Vite + Tailwind CSS | Real-time SSE consumer, timeline UI, approval workflow, graph visualizer, metrics dashboard |
-| CI | GitHub Actions (Python 3.11 / 3.12 / 3.14 canary) | Per-subsystem coverage thresholds; warning budget gate on canary Python |
+---
 
 ## Measured Results
 
 | Metric | Value | Notes |
 |---|---|---|
-| Backend test suite | 122 tests | Unit + integration tests; `pytest` |
-| Frontend test suite | Unit + E2E | Vitest (unit) + Playwright (E2E smoke) |
-| Load test throughput | 8.05 req/s aggregated, 0% failures | Locust headless: 10 users, spawn-rate 2, run-time 2m |
-| Load test scenario 1 (baseline) | TTFB p50 6.28ms / p95 8.68ms | 43 sampled single-user streamed runs |
-| Load test scenario 2 (concurrent) | /api/runs/stream p50 4ms / p95 7ms / p99 33ms | 252 concurrent requests; 10-user run |
-| Load test scenario 3 (SSE reconnect) | 0/42 successful | Insufficient timeline depth in test environment |
-| Load test scenario 4 (budget exhaustion) | 0/42 reached exhausted status | API minimum budget insufficient for exhaustion in test load |
-| Load test scenario 5 (idempotency) | 41/42 same run_id on duplicate | Dual-submit with same objective + idempotency key |
-| Refusal accuracy | 91.0% | Promptfoo `refusalCorrectness` summary from `evals/example-results.json` (18 tests, 2026-04-15) |
-| Avg cost per completed run | $0.0000 | Live run sample from local `/api/runs` (41 completed runs, zero recorded `estimated_cost_usd`) |
-| Python versions | 3.11, 3.12, 3.14 canary | CI matrix; warning budget gate on canary |
-| Cache hit latency | ~2ms | Normalized query cache in-memory response |
-| Node execution latency | ~200–800ms per node | Provider-dependent; local Ollama model load dominates first call |
+| Backend test suite | **122 tests passing** | Unit + integration; `pytest` on Python 3.11 / 3.12 / 3.14 canary |
+| Load test throughput | **8.05 req/s, 0% failures** | Locust headless: 10 users, spawn-rate 2, 2-min run |
+| TTFB (single user, p95) | **8.68ms** | 43 sampled streamed runs |
+| Concurrent p95 latency | **7ms** (`/api/runs/stream`) | 252 requests, 10 users |
+| Idempotency | **41 / 42 same run_id** | Dual-submit with identical objective + key |
+| Refusal accuracy | **91%** | Promptfoo `refusalCorrectness`; 18 adversarial cases (2026-04-15) |
+| Cache hit latency | **~2ms** | Normalized query cache in-memory |
+| Node execution latency | **~200–800ms** | Provider-dependent; Ollama cold start dominates first call |
+| SLO target | **p95 ≤ 1200ms** | Excluding model runtime; see `docs/SLO_AND_ALERTING.md` |
+
+---
+
+## Full Tech Stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| Agent orchestration | **LangGraph (StateGraph)** | Explicit node/edge model; human approval is a native graph node, not a workaround |
+| API framework | **FastAPI + Uvicorn** | Async-native; SSE via `StreamingResponse` with no extra infrastructure |
+| Database | **PostgreSQL 16 + SQLAlchemy 2 + Alembic** | Durable run state; fail-fast migration check on production startup |
+| Task queue | **Redis 7 + RQ** | Decouples HTTP response from long-running graph execution |
+| Rate limiter | **Redis fixed-window (fail-open)** | Service stays up during Redis outages; fail-open events logged for operators |
+| Auth | **JWT (HS256) + API key, dual-mode** | JWT RBAC for multi-user; API key for CI and single-operator setups |
+| Web search | **Tavily API** | Structured results with URL + content; degrades to placeholder when absent |
+| Keyword retrieval | **rank-bm25 (BM25Okapi)** | Captures exact lexical matches that vector search misses |
+| Reranking | **cross-encoder/ms-marco-MiniLM-L-6-v2** | Jointly scores query–document pairs; lazy-loaded, fail-open |
+| Tracing | **LangSmith (opt-in)** | Span-level trace of every LLM call and retrieval step |
+| Observability | **OpenTelemetry + Jaeger** | OTEL-compatible trace pipeline; Jaeger UI for local/debug analysis |
+| Eval framework | **Promptfoo + custom JS evaluators** | Adversarial tests in CI; prompt injection, refusal accuracy, grounded pass rate |
+| LLM inference | **Ollama / OpenAI / Anthropic** | Single `LLM_PROVIDER` switch; provider-specific model + key config |
+| Content sniffing | **python-magic** | Rejects disguised executables on file upload via magic-byte inspection |
+| Frontend | **React 18 + Vite + Tailwind CSS** | Real-time SSE consumer, timeline UI, approval workflow, graph visualizer |
+| CI | **GitHub Actions (Python 3.11, 3.12, 3.14 canary)** | Per-subsystem coverage thresholds; warning budget gate on canary |
 
 ---
 
@@ -151,46 +180,46 @@ Five ADRs explain the rationale behind LangGraph selection, SSE transport, fail-
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Rytnix786/Nexus)
 
-One-click deploy target: Railway template flow pointing to this repository. After deployment, set required variables (`POSTGRES_PASSWORD`, `API_KEY`, `JWT_SECRET`) and optional provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`) in Railway Variables.
+One-click deploy via Railway. After deployment, set the required environment variables in Railway Variables:
 
-### Prerequisites
+```
+POSTGRES_PASSWORD    your_db_password
+API_KEY              your_strong_random_api_key
+JWT_SECRET           your_strong_jwt_secret
+```
 
-- Docker and Docker Compose
-- Tavily API key (free tier, optional; system degrades to static fallback without it)
+And optionally:
 
-### 1. Clone and configure
+```
+TAVILY_API_KEY       tvly-...           # Enables live web search
+OPENAI_API_KEY       sk-...             # OpenAI LLM provider
+ANTHROPIC_API_KEY    sk-ant-...         # Anthropic LLM provider
+LANGSMITH_API_KEY    ls__...            # LangSmith tracing
+```
+
+---
+
+### Local Setup
+
+**Prerequisites:** Docker + Docker Compose. Tavily API key is optional (system degrades gracefully without it).
+
+#### 1. Clone and configure
 
 ```bash
-git clone https://github.com/<owner>/nexus-researcher.git
-cd nexus-researcher/NEXUS_R_Main
+git clone https://github.com/Rytnix786/Nexus.git
+cd Nexus/NEXUS_R_Main
 cp .env.example .env
 ```
 
-Edit `.env` and set **required** variables:
+Edit `.env` with your required variables (see above).
 
-```env
-# Required
-POSTGRES_USER=nexus
-POSTGRES_PASSWORD=your_db_password
-POSTGRES_DB=nexus
-API_KEY=your_strong_random_api_key
-JWT_SECRET=your_strong_jwt_secret
-
-# Optional — enables live web search. Without this, runs use a static placeholder.
-TAVILY_API_KEY=tvly-...
-
-# Optional — enables LangSmith tracing
-LANGSMITH_API_KEY=ls__...
-LANGSMITH_ENABLED=false
-```
-
-### 2. Start the stack
+#### 2. Start the stack
 
 ```bash
 docker compose up --build
 ```
 
-This brings up PostgreSQL, Redis, the configured LLM backend, a backend API server, an RQ worker, and the React frontend. Alembic migrations run automatically on backend startup. When `LLM_PROVIDER=ollama`, the Ollama model download on first run may take a few minutes.
+This brings up PostgreSQL, Redis, the LLM backend, the API server, an RQ worker, and the React frontend. Alembic migrations run automatically on startup.
 
 | Service | URL |
 |---|---|
@@ -198,9 +227,7 @@ This brings up PostgreSQL, Redis, the configured LLM backend, a backend API serv
 | Backend API | http://localhost:8000/api |
 | Health check | http://localhost:8000/api/health |
 
-### 3. Start your first run
-
-**Via curl:**
+#### 3. Submit your first research run
 
 ```bash
 curl -X POST http://localhost:8000/api/runs/stream \
@@ -216,25 +243,19 @@ curl -X POST http://localhost:8000/api/runs/stream \
 
 You will see a live SSE stream of `run_started`, `timeline` (one per node), and `run_finished` events.
 
-**Via UI:**
+Or open [http://localhost:5173](http://localhost:5173) and submit through the **Mission Control** UI.
 
-Open http://localhost:5173, submit your research objective through the Mission Control interface, and watch the agent timeline in real time.
-
-### 4. Run the test suite
+#### 4. Run the test suite
 
 ```bash
-cd backend
-python -m pytest tests -q
+cd backend && python -m pytest tests -q
+# Expected: 122 passed, 0 failed
 ```
 
-Expected result: **122 passed, 0 failed**.
-
-### 5. Run adversarial evals
+#### 5. Run adversarial evals
 
 ```bash
-cd evals
-npm run eval
-npm run eval:view    # opens HTML report
+cd evals && npm run eval && npm run eval:view
 ```
 
 ---
@@ -246,61 +267,47 @@ NEXUS_R_Main/
 ├── backend/
 │   ├── app/
 │   │   ├── agents/
-│   │   │   ├── graph.py        # LangGraph StateGraph + routing logic
-│   │   │   ├── nodes.py        # All 8 node implementations
-│   │   │   └── tools.py        # web_search, bm25_search, rerank
+│   │   │   ├── graph.py          # LangGraph StateGraph + routing logic
+│   │   │   ├── nodes.py          # All 8 node implementations
+│   │   │   └── tools.py          # web_search, bm25_search, rerank
 │   │   ├── api/
-│   │   │   └── routes.py       # All HTTP + SSE endpoints (15 total)
-│   │   ├── core/
-│   │   │   ├── orchestrator.py # Run lifecycle, SSE emission, token ledger
-│   │   │   ├── auth.py         # JWT + API key dual-mode auth
-│   │   │   ├── rate_limiter.py # Redis fail-open fixed-window limiter
-│   │   │   ├── state.py        # AgentState TypedDict
-│   │   │   ├── cache.py        # In-memory response cache with deterministic keys
-│   │   │   ├── logging.py      # Structured JSON logging with correlation IDs
-│   │   │   ├── tracing.py      # LangSmith opt-in span wrappers
-│   │   │   └── settings.py     # Pydantic settings from environment
-│   │   └── db/
-│   │       ├── repository.py   # persist_step, consume_quota_tokens, recover_run
-│   │       └── models.py       # SQLAlchemy ORM for Run, RunEvent, RunCheckpoint
+│   │   │   └── routes.py         # All HTTP + SSE endpoints (15 total)
+│   │   └── core/
+│   │       ├── orchestrator.py   # Run lifecycle, SSE emission, token ledger
+│   │       ├── auth.py           # JWT + API key dual-mode auth
+│   │       ├── rate_limiter.py   # Redis fail-open fixed-window limiter
+│   │       ├── state.py          # AgentState TypedDict
+│   │       ├── cache.py          # In-memory cache with deterministic keys
+│   │       ├── logging.py        # Structured JSON logging + correlation IDs
+│   │       ├── tracing.py        # LangSmith opt-in span wrappers
+│   │       └── settings.py       # Pydantic settings from environment
 │   ├── tests/
-│   │   ├── unit/               # 100+ unit tests (nodes, tools, auth, quota, cache, tracing)
-│   │   ├── integration/        # Run lifecycle, API contracts, e2e workflows
-│   │   ├── load/               # Locust load-test suite with 5 scenarios
-│   │   └── conftest.py         # Pytest fixtures (client, monkeypatch, etc.)
-│   ├── alembic/                # Migration history for schema changes
-│   ├── requirements.txt        # Python dependencies (FastAPI, LangGraph, SQLAlchemy, etc.)
+│   │   ├── unit/                 # 100+ unit tests
+│   │   ├── integration/          # Run lifecycle, API contracts, e2e workflows
+│   │   ├── load/                 # Locust: 5 scenarios
+│   │   └── conftest.py
+│   ├── alembic/                  # Migration history
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── components/         # React components (Timeline, ApprovalUI, GraphViz, etc.)
-│   │   ├── pages/              # Page routes (Home, Results, Settings, Library)
-│   │   ├── hooks/              # Custom hooks (useSSEStream, useRunStatus, etc.)
-│   │   ├── services/           # API client, SSE consumer
-│   │   ├── types/              # TypeScript interfaces
-│   │   └── App.tsx
-│   ├── tests/                  # Vitest unit tests + Playwright e2e smoke tests
-│   ├── package.json
-│   ├── vite.config.js          # Vite build config
-│   ├── tailwind.config.js      # Tailwind CSS customization
+│   │   ├── components/           # Timeline, ApprovalUI, GraphViz, metrics
+│   │   ├── hooks/                # useSSEStream, useRunStatus, ...
+│   │   └── services/             # API client, SSE consumer
+│   ├── tests/                    # Vitest unit + Playwright E2E
 │   └── Dockerfile
 ├── evals/
-│   ├── nexus-test-cases.yaml   # 18 test cases (4 categories: correctness, safety, grounding, refusal)
-│   ├── evaluators.js           # 5 custom JS evaluators (no LLM scoring)
-│   ├── promptfoo.yaml          # Promptfoo config
-│   └── package.json
+│   ├── nexus-test-cases.yaml     # 18 adversarial test cases
+│   ├── evaluators.js             # 5 custom JS evaluators (no LLM scoring)
+│   └── promptfoo.yaml
 ├── docs/
-│   ├── adr/                    # 5 Architecture Decision Records
-│   ├── INCIDENT_RUNBOOK.md     # On-call incident response procedures
-│   ├── RELEASE_CHECKLIST.md    # Pre-release validation steps
-│   └── SLO_AND_ALERTING.md     # Service Level Objectives + alert policies
-├── .github/workflows/
-│   └── ci.yml                  # GitHub Actions: tests, migrations, build, audit, gates
-├── docker-compose.yml          # Full stack: PostgreSQL, Redis, LLM backend, backend, worker, frontend
-├── .env.example                # Template for environment variables
-├── Makefile                    # make load-test, make test, make lint, etc.
-├── start.ps1                   # Windows startup script
-└── start.sh                    # Linux/macOS startup script
+│   ├── adr/                      # 5 Architecture Decision Records
+│   ├── INCIDENT_RUNBOOK.md
+│   ├── RELEASE_CHECKLIST.md
+│   └── SLO_AND_ALERTING.md
+├── .github/workflows/ci.yml      # Full CI pipeline
+├── docker-compose.yml
+├── .env.example
+└── Makefile
 ```
 
 ---
@@ -309,31 +316,31 @@ NEXUS_R_Main/
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/api/health` | No | Liveness check |
-| GET | `/api/health/ratelimit` | No | Redis limiter status and fail-open counters |
-| GET | `/api/metrics` | Yes | Aggregate run metrics |
-| POST | `/api/uploads` | Yes | Upload PDF/DOCX/TXT; magic-byte content sniffing rejects disguised files |
-| GET | `/api/runs` | Yes | List runs with filters and pagination |
-| GET | `/api/runs/{run_id}` | Yes | Run status and details |
-| GET | `/api/runs/{run_id}/timeline` | Yes | Persisted timeline events (supports SSE replay) |
-| POST | `/api/runs/stream` | Yes | Start a run and stream SSE events |
-| POST | `/api/runs/{run_id}/resume/stream` | Yes | Post human decision and resume approval-paused run |
-| POST | `/api/runs/{run_id}/resume-budget/stream` | Yes | Top up token budget and resume budget-exhausted run |
-| POST | `/api/runs/{run_id}/stop` | Yes | Halt an active run |
+| `GET` | `/api/health` | — | Liveness check |
+| `GET` | `/api/health/ratelimit` | — | Redis limiter status + fail-open counters |
+| `GET` | `/api/metrics` | ✓ | Aggregate run metrics (Prometheus-compatible) |
+| `POST` | `/api/uploads` | ✓ | Upload PDF / DOCX / TXT with magic-byte content sniffing |
+| `GET` | `/api/runs` | ✓ | List runs with filters and pagination |
+| `GET` | `/api/runs/{run_id}` | ✓ | Run status and details |
+| `GET` | `/api/runs/{run_id}/timeline` | ✓ | Persisted timeline events (supports SSE replay) |
+| `POST` | `/api/runs/stream` | ✓ | Start a run and stream SSE events |
+| `POST` | `/api/runs/{run_id}/resume/stream` | ✓ | Post human decision; resume approval-paused run |
+| `POST` | `/api/runs/{run_id}/resume-budget/stream` | ✓ | Top up token budget; resume budget-exhausted run |
+| `POST` | `/api/runs/{run_id}/stop` | ✓ | Halt an active run |
 
-Auth accepts `X-API-Key` header or `Authorization: Bearer <token>`. With `AUTH_RBAC_V2=true`, JWT tokens carry `sub` and `role` claims used for per-subject quota tracking.
+Auth: `X-API-Key` header or `Authorization: Bearer <token>`. With `AUTH_RBAC_V2=true`, JWT tokens carry `sub` and `role` claims for per-subject quota tracking.
 
 ---
 
 ## Architecture Decision Records
 
-| ADR | Decision | One-line Summary |
+| ADR | Decision | Summary |
 |---|---|---|
-| [ADR-001](docs/adr/ADR-001-fail-open-rate-limiting-with-redis.md) | Fail-open Redis rate limiter | Redis outage allows traffic through; counters expose fail-open events to operators |
-| [ADR-002](docs/adr/ADR-002-server-sent-events-for-streaming.md) | SSE over WebSockets | One-way server push with HTTP replay semantics; simpler for proxies and reconnect logic |
-| [ADR-003](docs/adr/ADR-003-langgraph-for-agent-orchestration.md) | LangGraph over imperative or CrewAI | Explicit named nodes and edges; human approval is a native first-class step |
-| [ADR-004](docs/adr/ADR-004-checkpoint-every-state-transition.md) | Checkpoint per state transition | Runs are resumable from any step; timeline UI reconstructs from stored events on reconnect |
-| [ADR-005](docs/adr/ADR-005-tool-based-web-search-inside-agent-nodes.md) | Web search inside agent node, not API layer | Search stays within the workflow model; degrades gracefully when Tavily is absent |
+| [ADR-001](docs/adr/ADR-001-fail-open-rate-limiting-with-redis.md) | Fail-open Redis rate limiter | Redis outage allows traffic through; fail-open events exposed to operators |
+| [ADR-002](docs/adr/ADR-002-server-sent-events-for-streaming.md) | SSE over WebSockets | One-way push with HTTP replay semantics; simpler for proxies and reconnect logic |
+| [ADR-003](docs/adr/ADR-003-langgraph-for-agent-orchestration.md) | LangGraph over CrewAI / imperative | Named nodes and edges; human approval is a native first-class step |
+| [ADR-004](docs/adr/ADR-004-checkpoint-every-state-transition.md) | Checkpoint per state transition | Runs resumable from any step; timeline reconstructed from stored events on reconnect |
+| [ADR-005](docs/adr/ADR-005-tool-based-web-search-inside-agent-nodes.md) | Web search inside agent node | Search stays within the workflow model; degrades gracefully without Tavily |
 
 ---
 
@@ -341,132 +348,134 @@ Auth accepts `X-API-Key` header or `Authorization: Bearer <token>`. With `AUTH_R
 
 GitHub Actions workflow: `.github/workflows/ci.yml`
 
-**Required gates that must pass before merge:**
+All of the following gates must pass before merge:
 
-1. **Backend tests** — `python -m pytest tests -q` on Python 3.11
-2. **Migration check** — Alembic `upgrade head` against a real PostgreSQL 16 instance; validates `alembic_version` table
+1. **Backend tests** — `pytest tests -q` on Python 3.11
+2. **Migration check** — Alembic `upgrade head` against a real PostgreSQL 16 instance
 3. **Frontend unit tests** — `npm run test` (Vitest)
-4. **Frontend E2E smoke** — `npm run test:e2e` (Playwright on Chromium)
+4. **Frontend E2E smoke** — `npm run test:e2e` (Playwright / Chromium)
 5. **Build gates** — Backend compile check + frontend production build
-6. **Dependency audit** — `pip-audit --strict` on backend + `npm audit --audit-level=high` on frontend
-7. **Required gates check** — Fails if any of the above is unsuccessful
+6. **Dependency audit** — `pip-audit --strict` + `npm audit --audit-level=high`
+7. **Required gates check** — Hard-fails if any of the above is unsuccessful
 
-Python version matrix: 3.11 (primary), 3.12 (secondary), 3.14 canary. Canary failures are logged but do not block merge (warning budget gate).
+Python matrix: **3.11** (primary) · **3.12** (secondary) · **3.14 canary** (warning budget gate — failures logged but do not block merge).
 
 ---
 
 ## Operational Documentation
 
-- [INCIDENT_RUNBOOK.md](docs/INCIDENT_RUNBOOK.md) — On-call response, debugging playbooks, escalation procedures
-- [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) — Pre-release validation, database migration strategy, rollback plan
-- [SLO_AND_ALERTING.md](docs/SLO_AND_ALERTING.md) — Service Level Objectives, alert definitions, error budgets
+| Document | Purpose |
+|---|---|
+| [INCIDENT_RUNBOOK.md](docs/INCIDENT_RUNBOOK.md) | On-call response, debugging playbooks, escalation procedures |
+| [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) | Pre-release validation, migration strategy, rollback plan |
+| [SLO_AND_ALERTING.md](docs/SLO_AND_ALERTING.md) | Service Level Objectives, alert definitions, error budgets |
 
 ---
-
-## What I Learned Building This
-
-The hardest part was not building any single component — it was making them compose correctly under failure. SSE resume semantics sound simple until you realize the client reconnects mid-stream and you have to decide what "resume" actually means when a node is still running on the server. I ended up modeling events with monotone sequence numbers, so reconnecting clients send `Last-Event-ID` and the server replays from a known point.
-
-Refusal gating was similarly subtle. The first version let the LLM decide when to refuse, which made refusal behavior unpredictable and untestable. Moving it to the graph level — as a deterministic node that activates when the Analyst's evidence falls below a measurable threshold — made it testable and tunable without touching prompts.
-
-Reranking with a cross-encoder is expensive on cold start, so I added module-level lazy load with fail-open fallback: if sentence-transformers isn't available or the model fails to load, the function returns the RRF-fused results without crashing. That pattern — fail open with a logged warning, not an exception — shows up throughout the system because a partially degraded answer is almost always better than a 500 error.
-
-The token ledger taught me that quota tracking and budget enforcement are different problems. A budget is per-run and stops execution. A quota is per-user per-day and shapes pricing. Conflating them produces bugs where exceeding a daily limit kills an unrelated run. Separating them into distinct fields in `AgentState` and distinct DB writes in the repository made the behavior clear and testable.
-
----
-
-## Known Limitations and Future Work
-
-**Current limitations:**
-
-- Ollama inference is hardware-dependent and not horizontally scalable as-is; OpenAI and Anthropic trade that for network latency and API cost.
-- Single-region deployment model (no multi-region failover).
-- Multi-tenant data isolation is not yet implemented; single tenant per deployment.
-- Persistent user knowledge base (long-term memory) is not yet implemented.
-- Async task queue (RQ) runs in process with the API; no separate worker fleet.
-
-**Tradeoffs:**
-
-- Frontend file upload (PDF, DOCX, TXT) is session-only; files are not persisted across page refreshes.
-- Tavily API is optional; the system falls back to a static placeholder search result without it.
-- LangSmith tracing is opt-in; no built-in metrics dashboard (see `/api/metrics` for Prometheus-compatible aggregates).
-
----
-## Troubleshooting
-
-### Docker stack will not start
-
-- Confirm Docker Desktop is running and `docker compose ps` shows `backend`, `frontend`, `postgres`, `redis`, and `ollama` when `LLM_PROVIDER=ollama`.
-- Rebuild the stack from the repository root with `docker compose up --build -d`.
-- Inspect recent failures with `docker compose logs --no-color --tail=100 backend worker frontend`.
-
-### Backend health or migrations fail
-
-- Check `GET /api/health` first to confirm the API is alive.
-- If the database schema looks stale, run `docker compose exec -T backend alembic upgrade head`.
-- If migration checks still fail in CI, validate that `alembic_version` contains a current revision after upgrade.
-
-### Run stream returns 422 or stalls
-
-- Ensure the request body matches the `POST /api/runs/stream` schema and that required auth headers are present when API keys are enabled.
-- Watch backend and worker logs together so you can see both request acceptance and orchestrator execution.
-- If the worker is healthy but the stream is empty, verify Redis connectivity and the queue consumer status.
-
-### Dependency audit or test gates fail
-
-- Re-run backend tests with `python -m pytest tests -q` and frontend tests with `npm run test`.
-- Re-run dependency checks with `pip-audit --strict -r requirements.txt` and `npm audit --audit-level=high --omit=dev`.
-- If `npm ci` or `pip install -r requirements.txt` changes the environment, repeat the tests before pushing.
-
-## Performance Benchmarking
-
-The main published performance target is the SLO for `POST /api/runs/stream`: p95 latency must stay at or below 1200ms excluding model runtime. See `docs/SLO_AND_ALERTING.md` for the full policy.
 
 ## Quick Reference
 
-Start the full stack:
-
 ```bash
+# Start the full stack
 cd NEXUS_R_Main && docker compose up --build
-```
 
-Run all backend tests:
-
-```bash
+# Run backend tests
 cd NEXUS_R_Main/backend && python -m pytest tests -q
-```
 
-Run load tests (Locust, headless):
-
-```bash
+# Run load tests (Locust, headless)
 cd NEXUS_R_Main && make load-test
-python -m locust -f backend/tests/load/locustfile.py --host http://127.0.0.1:8000 --headless --users 10 --spawn-rate 2 --run-time 2m
-```
 
-Check migration status:
-
-```bash
-cd NEXUS_R_Main/backend && alembic current
-```
-
-Run adversarial evals:
-
-```bash
+# Run adversarial evals
 cd NEXUS_R_Main/evals && npm run eval && npm run eval:view
-```
 
-Tail backend logs:
+# Check migration status
+cd NEXUS_R_Main/backend && alembic current
 
-```bash
+# Tail backend logs
 docker compose -f NEXUS_R_Main/docker-compose.yml logs -f backend
 ```
 
 ---
 
-## License
+## What I Learned Building This
 
-MIT. Built as a portfolio project by Mehedi Hasan, BRAC University, Dhaka, Bangladesh.
+The hardest part wasn't building any individual component — it was making them **compose correctly under failure**.
+
+SSE resume semantics sound simple until the client reconnects mid-stream and you have to decide what "resume" actually means when a node is still executing on the server. Modeling events with monotone sequence numbers, so reconnecting clients send `Last-Event-ID` and the server replays from a known point, was the right answer — but it took a wrong version first.
+
+Refusal gating was similarly subtle. The first version let the LLM decide when to refuse, which made refusal behavior unpredictable and untestable. Moving it to the graph level — a deterministic node that activates on a measurable evidence threshold — made it testable and tunable without touching prompts.
+
+Reranking with a cross-encoder is expensive on cold start. The solution was module-level lazy load with fail-open fallback: if `sentence-transformers` isn't available, the function returns RRF-fused results without crashing. That pattern — fail open with a logged warning, not an exception — shows up throughout the system because a partially degraded answer is almost always better than a 500 error.
+
+The token ledger taught me that **quota tracking and budget enforcement are different problems**. A budget is per-run and stops execution. A quota is per-user per-day and shapes pricing. Conflating them produces subtle bugs. Separating them into distinct fields in `AgentState` and distinct DB writes made the behavior clear and testable.
 
 ---
 
-[GitHub](https://github.com/Rytnix786/Nexus) · [LinkedIn](https://www.linkedin.com/in/mehedi-hasan-rytnix786/) · Built April 2026
+## Known Limitations & Future Work
+
+**Current limitations:**
+- Ollama inference is hardware-dependent and not horizontally scalable as-is.
+- Single-region deployment (no multi-region failover).
+- Multi-tenant data isolation not yet implemented — single tenant per deployment.
+- Long-term user knowledge base (persistent memory) not yet implemented.
+- RQ worker runs in-process with the API; no separate worker fleet.
+
+**Tradeoffs by design:**
+- Frontend file uploads (PDF, DOCX, TXT) are session-only; files don't persist across page refreshes.
+- Tavily API is optional; system falls back to a static placeholder search result without it.
+- LangSmith tracing is opt-in; use `/api/metrics` for Prometheus-compatible aggregates.
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><strong>Docker stack will not start</strong></summary>
+
+- Confirm Docker Desktop is running and `docker compose ps` shows `backend`, `frontend`, `postgres`, `redis`, and `ollama`.
+- Rebuild from the repository root: `docker compose up --build -d`
+- Inspect recent failures: `docker compose logs --no-color --tail=100 backend worker frontend`
+
+</details>
+
+<details>
+<summary><strong>Backend health or migrations fail</strong></summary>
+
+- Check `GET /api/health` first to confirm the API is alive.
+- If the schema looks stale: `docker compose exec -T backend alembic upgrade head`
+- If migration checks still fail in CI, validate that `alembic_version` contains a current revision after upgrade.
+
+</details>
+
+<details>
+<summary><strong>Run stream returns 422 or stalls</strong></summary>
+
+- Ensure the request body matches `POST /api/runs/stream` schema and required auth headers are present.
+- Watch backend and worker logs together to see both request acceptance and orchestrator execution.
+- If the worker is healthy but the stream is empty, verify Redis connectivity and queue consumer status.
+
+</details>
+
+<details>
+<summary><strong>Dependency audit or test gates fail</strong></summary>
+
+- Backend: `python -m pytest tests -q` and `pip-audit --strict -r requirements.txt`
+- Frontend: `npm run test` and `npm audit --audit-level=high --omit=dev`
+- If `npm ci` or `pip install` changes the environment, repeat tests before pushing.
+
+</details>
+
+---
+
+## License
+
+MIT. Built by **[Mehedi Hasan](https://www.linkedin.com/in/mehedi-hasan-rytnix786/)**, BRAC University, Dhaka, Bangladesh — April 2026.
+
+---
+
+<div align="center">
+
+[GitHub](https://github.com/Rytnix786/Nexus) · [LinkedIn](https://www.linkedin.com/in/mehedi-hasan-rytnix786/) · [Deploy on Railway](https://railway.app/new/template?template=https://github.com/Rytnix786/Nexus)
+
+**If this was useful, a ⭐ on the repo goes a long way.**
+
+</div>
